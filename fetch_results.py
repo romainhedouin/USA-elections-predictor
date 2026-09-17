@@ -53,9 +53,21 @@ def state_rows(payload):
 
 def fetch_race(race, cycle, skip, workers=8):
     race_slug = RACES[race]["nbc_slug"]
-    slugs = [s for s in nbc_api.state_slugs(race_slug, cycle) if s not in skip]
+    try:
+        published = nbc_api.state_slugs(race_slug, cycle)
+    except requests.HTTPError as error:
+        status = error.response.status_code if error.response is not None else "?"
+        if status == 404:
+            # Routine before an election: the cycle only exists once there are
+            # results. Say so in one line rather than a traceback - a scheduler
+            # will hit this on every run for weeks beforehand.
+            sys.exit(f"No {race} results published for {cycle} yet (404). "
+                     f"Nothing to fetch; existing data is left alone.")
+        raise
+
+    slugs = [s for s in published if s not in skip]
     if not slugs:
-        sys.exit(f"NBC lists no states for {race} {cycle}. Has it published that cycle yet?")
+        sys.exit(f"No states listed for {race} {cycle}. Has that cycle been published yet?")
 
     def one(state_slug):
         try:
