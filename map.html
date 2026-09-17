@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>USA Election Live Predictor</title>
+<script>
+  // Runs before the stylesheet is applied, so the page never flashes the wrong
+  // theme or palette on load. An explicit data-theme also means the CSS needs
+  // only one copy of the dark tokens, instead of one for the media query and
+  // one for the manual override.
+  (function () {
+    var root = document.documentElement, stored = null, palette = null;
+    try { stored = localStorage.getItem("theme"); palette = localStorage.getItem("palette"); } catch (e) { /* private mode */ }
+    var dark = stored ? stored === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "dark" : "light";
+    if (palette === "cvd") root.dataset.palette = "cvd";
+  })();
+</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2300337c'/><path d='M8 0h8v16H8z' fill='%23ce3e39'/></svg>">
 <style>
   /* ---------- tokens ----------
@@ -21,7 +34,7 @@
      spread far enough apart in lightness to stay distinct in greyscale, where
      hue carries nothing at all. */
   :root {
-    color-scheme: light dark;
+    color-scheme: light;
 
     /* Traditional US election-map blue and red. */
     --dem-certain:   #1c4e8c;
@@ -69,9 +82,11 @@
     --mismatch-casing: #ffffff;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      /* Polarity inverts in the dark: "certain" is the bright, saturated one. */
+  :root[data-theme="dark"] {
+      color-scheme: dark;
+      /* Polarity inverts in the dark: on a dark background the deep navy and
+         crimson recede, so "certain" is the bright, saturated one and
+         "projected" is the muted one. Same ranking, opposite direction. */
       --dem-certain:   #6aa5e8;
       --dem-projected: #2c4d7a;
       --rep-certain:   #f08a86;
@@ -92,17 +107,16 @@
       --chip: #232a34;
       --chip-hover: #2c3440;
       --danger: #f59a9a;
-    }
+  }
 
-    :root[data-palette="cvd"] {
-      --dem-certain:   #4d87c5;
-      --dem-projected: #2e4f80;
-      --rep-certain:   #ffb7b6;
-      --rep-projected: #7d343a;
-      --no-data:       #2b323d;
-      --mismatch:      #f2f5f9;
-      --mismatch-casing: #0f1319;
-    }
+  :root[data-theme="dark"][data-palette="cvd"] {
+    --dem-certain:   #4d87c5;
+    --dem-projected: #2e4f80;
+    --rep-certain:   #ffb7b6;
+    --rep-projected: #7d343a;
+    --no-data:       #2b323d;
+    --mismatch:      #f2f5f9;
+    --mismatch-casing: #0f1319;
   }
 
   /* ---------- base ---------- */
@@ -168,12 +182,14 @@
   .tabs button .tab-year { font-size: 0.72rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
   .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--page-bg); border-color: var(--ink); }
 
-  #palette-toggle {
+  .header-controls button.chip-button {
     font: inherit; font-size: 0.8rem; min-height: 44px; padding: 0.4rem 0.8rem;
     border-radius: 9px; border: 1px solid var(--border); background: var(--card-bg);
     color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;
   }
-  #palette-toggle[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+  .header-controls button.chip-button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+  #theme-toggle { padding: 0.4rem 0.7rem; }
+  #theme-toggle svg { width: 15px; height: 15px; display: block; }
   #palette-toggle .dot {
     width: 11px; height: 11px; border-radius: 50%; flex: none;
     background: linear-gradient(135deg, var(--dem-certain) 50%, var(--rep-certain) 50%);
@@ -326,7 +342,10 @@
     .header-controls { display: block; }
     .tabs { display: grid; grid-template-columns: repeat(3, 1fr); }
     .tabs button { padding: 0.4rem 0.3rem; }
-    #palette-toggle { width: 100%; justify-content: center; margin-top: 0.4rem; }
+    .header-controls { display: flex; gap: 0.4rem; }
+    .tabs { flex: 1 1 100%; }
+    #palette-toggle { flex: 1 1 auto; justify-content: center; margin-top: 0.4rem; }
+    #theme-toggle { margin-top: 0.4rem; }
   }
 
   /* ---------- phone ---------- */
@@ -397,9 +416,13 @@
     </div>
     <div class="header-controls">
       <div class="tabs" id="race-tabs" role="group" aria-label="Race"></div>
-      <button id="palette-toggle" type="button" aria-pressed="false"
+      <button id="palette-toggle" class="chip-button" type="button" aria-pressed="false"
               title="Switch to a palette that stays distinguishable with colour-vision deficiency">
         <span class="dot" aria-hidden="true"></span><span id="palette-label">Colour-blind mode</span>
+      </button>
+      <button id="theme-toggle" class="chip-button" type="button" aria-pressed="false" aria-label="Switch to dark theme">
+        <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
       </button>
     </div>
   </header>
@@ -410,7 +433,7 @@
 
   <div class="card map-card">
     <p class="map-hint">Click a state to drill down to its counties.
-      <span class="hint-long"><span class="hint-plain">Deeper colour means that region is done counting.</span><span class="hint-cvd" style="display:none">Solid means that region is done counting, hatched means it is still counting.</span></span></p>
+      <span class="hint-long"><span class="hint-plain">Muted colour means that region is still counting.</span><span class="hint-cvd" style="display:none">Solid means that region is done counting, hatched means it is still counting.</span></span></p>
     <svg id="map" class="loading" viewBox="0 0 975 610" role="img" aria-label="Map of the United States coloured by projected winner"></svg>
     <div id="loading" role="status">Loading map data&hellip;</div>
     <div id="error" role="alert"></div>
@@ -1096,8 +1119,12 @@ function start(topology, president) {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(redrawAll, 150);
   });
-  window.matchMedia("(prefers-color-scheme: dark)")
-    .addEventListener("change", () => { redrawAll(); renderScoreboard(); });
+  // Follow the OS only while the user has not picked a theme themselves.
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", event => {
+    let chosen = null;
+    try { chosen = localStorage.getItem("theme"); } catch (err) { /* private mode */ }
+    if (!chosen) applyTheme(event.matches ? "dark" : "light", true);
+  });
 
   // Re-pull the active race on a timer, so a deployed page keeps up with the
   // count without anyone reloading. Skip the redraw when nothing changed:
@@ -1116,6 +1143,31 @@ function start(topology, president) {
       })
       .catch(err => console.warn("refresh failed, keeping current data", err));
   }, REFRESH_SECONDS * 1000);
+
+  // Theme. The OS preference is the default, but it is only a default - the
+  // page never shows both themes, so without an override nobody can see the
+  // other one.
+  const SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  const MOON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+  const themeButton = document.getElementById("theme-toggle");
+
+  function applyTheme(theme, redraw) {
+    document.documentElement.dataset.theme = theme;
+    const dark = theme === "dark";
+    themeButton.setAttribute("aria-pressed", String(dark));
+    themeButton.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+    themeButton.setAttribute("title", dark ? "Switch to light theme" : "Switch to dark theme");
+    // Show where the click goes, not where you are.
+    document.getElementById("theme-icon").innerHTML = dark ? SUN : MOON;
+    if (redraw) { redrawAll(); renderScoreboard(); }
+  }
+  themeButton.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem("theme", next); } catch (err) { /* private mode */ }
+    applyTheme(next, true);
+  });
+  // The head script already set the attribute before paint; sync the button to it.
+  applyTheme(document.documentElement.dataset.theme || "light", false);
 
   // Remembered across visits: someone who needs this palette needs it every time.
   const paletteButton = document.getElementById("palette-toggle");
