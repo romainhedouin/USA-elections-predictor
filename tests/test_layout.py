@@ -94,3 +94,18 @@ def test_page_does_not_scroll_vertically(page, viewport):
     overflow = driver.execute_script(
         "const e = document.documentElement; return e.scrollHeight - e.clientHeight;")
     assert overflow <= 0, f"page scrolls vertically by {overflow}px despite being sized to fit"
+
+
+def test_page_works_without_injected_config(page):
+    """Served statically there is no window.__config, and the page must still
+    come up on its own - which is exactly how these tests serve it."""
+    driver = page("laptop")
+    state = driver.execute_script("""
+      const on = [...document.querySelectorAll('#race-tabs button')]
+        .find(b => b.getAttribute('aria-pressed') === 'true');
+      return {injected: window.__config === undefined,
+              landed: on ? on.textContent : null,
+              states: document.querySelectorAll('#map path.state').length};""")
+    assert state["injected"], "the static fixture should have no injected config"
+    assert state["landed"].startswith("President"), f"fell back wrongly: {state['landed']}"
+    assert state["states"] == 51

@@ -34,6 +34,9 @@ ENVIRONMENT
     DATA_YEAR        optional; the cycle to pull. Also accepts NBC_CYCLE.
     FETCH_TIMEOUT    int seconds, hard kill for one fetch, default 300.
     SEED_ON_BOOT     "0" disables the cold-start mock seed. Default on.
+    DEFAULT_RACE     which race a visitor lands on: president (default),
+                     senate or governor. Injected into the page; it does not
+                     affect what is fetched - that is RACES.
     REFRESH_ENABLED  "0" pauses fetching entirely. The site stays up and keeps
                      serving whatever is already on the volume; nothing is
                      pulled from upstream. Useful out of season, and the switch
@@ -90,6 +93,21 @@ def _parse_races(raw):
 
 
 RACES = _parse_races(os.environ.get("RACES"))
+
+
+def _parse_default_race(raw):
+    """Which race the page opens on. Unrelated to which races get refreshed."""
+    name = (raw or "").strip().lower()
+    if not name:
+        return "president"
+    if name not in ALL_RACES:
+        logging.warning("DEFAULT_RACE=%r is not one of %s - falling back to president",
+                        raw, ", ".join(ALL_RACES))
+        return "president"
+    return name
+
+
+DEFAULT_RACE = _parse_default_race(os.environ.get("DEFAULT_RACE"))
 
 
 def csv_name(race):
@@ -416,6 +434,7 @@ def health_payload():
         "uptime_seconds": round(time.time() - BOOT_TIME, 1),
         "data_dir": str(DATA_DIR),
         "repo_dir": str(REPO_DIR),
+        "default_race": DEFAULT_RACE,
         "refresh_enabled": REFRESH_ENABLED,
         "refresh_seconds": REFRESH_SECONDS,
         "fetch_timeout_seconds": FETCH_TIMEOUT,
@@ -456,6 +475,23 @@ class Handler(BaseHTTPRequestHandler):
         headers.update(extra_headers or {})
         self._send(200, body, content_type, headers, head_only)
 
+    def _send_index(self, head_only=False):
+        """map.html, with the runtime config substituted into its placeholder.
+
+        The page carries its own defaults, so the unsubstituted file is still a
+        working page - which is what the tests and a plain static server get.
+        """
+        try:
+            html = (REPO_DIR / "map.html").read_text(encoding="utf-8")
+        except OSError as exc:
+            log.error("read failed path=map.html err=%s", exc)
+            return self._send(500, "500 internal error\n", "text/plain; charset=utf-8",
+                              head_only=head_only)
+        config = json.dumps({"defaultRace": DEFAULT_RACE})
+        html = html.replace("<!--CONFIG-->", f"<script>window.__config={config};</script>", 1)
+        self._send(200, html, "text/html; charset=utf-8",
+                   {"Cache-Control": "no-cache"}, head_only)
+
     def _not_found(self, head_only=False):
         self._send(404, "404 not found\n", "text/plain; charset=utf-8", head_only=head_only)
 
@@ -465,9 +501,7 @@ class Handler(BaseHTTPRequestHandler):
         name = path.lstrip("/")
 
         if path in ("/", "/index.html", "/map.html"):
-            return self._send_file(REPO_DIR / "map.html",
-                                   "text/html; charset=utf-8",
-                                   {"Cache-Control": "no-cache"}, head_only)
+            return self._send_index(head_only)
 
         if path == "/healthz":
             code, payload = health_payload()
@@ -519,8 +553,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    log.info("boot repo_dir=%s data_dir=%s port=%s races=%s refresh=%ss",
-             REPO_DIR, DATA_DIR, PORT, ",".join(RACES), REFRESH_SECONDS)
+    log.info("boot repo_dir=%s data_dir=%s port=%s races=%s refresh=%ss default_race=%s",
+             REPO_DIR, DATA_DIR, PORT, ",".join(RACES), REFRESH_SECONDS, DEFAULT_RACE)
     if not (REPO_DIR / "map.html").is_file():
         log.error("map.html not found in %s - '/' will 404", REPO_DIR)
 

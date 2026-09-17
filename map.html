@@ -563,6 +563,7 @@
   </div>
 </div>
 
+<!--CONFIG-->
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 <script>
@@ -570,6 +571,7 @@ const TOPOLOGY_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-albers-10
 const CERTAIN_THRESHOLD = 95; // % reporting above which we call a race "certain" rather than "projected"
 const HATCH_PX = 5;           // hatch tile size, in screen pixels, for "projected" fills
 const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
+
 
 // President uses electoral votes, Senate/governor one seat per in-play state.
 // `year` is the election being reported on, which is not necessarily the year
@@ -616,6 +618,14 @@ const RACE_META = {
     ].map(s => [s, 1])),
   },
 };
+
+// Which race a visitor lands on. The server injects window.__config from its
+// DEFAULT_RACE env var; served statically there is no config and we fall back,
+// so the page keeps working on its own.
+const DEFAULT_RACE = (() => {
+  const wanted = (window.__config || {}).defaultRace;
+  return wanted && Object.prototype.hasOwnProperty.call(RACE_META, wanted) ? wanted : "president";
+})();
 
 // Read live so the OS light/dark theme, and any future palette edit, reaches
 // the SVG fills as well as the CSS-styled chrome.
@@ -799,7 +809,7 @@ if (typeof d3 === "undefined" || typeof topojson === "undefined") {
 } else {
   Promise.all([
     fetch(TOPOLOGY_URL).then(r => { if (!r.ok) throw new Error(`${r.status} fetching county boundaries`); return r.json(); }),
-    loadRace("president"),
+    loadRace(DEFAULT_RACE),
   ])
     .then(([topology, president]) => start(topology, president))
     .catch(err => {

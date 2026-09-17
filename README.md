@@ -166,6 +166,16 @@ DATA_DIR=./data REFRESH_SECONDS=900 NBC_CYCLE=2024 RACES=president python server
 ```
 
 It seeds mock data for every race on a cold start so the site is never broken,
-then fetches live results for whichever races `RACES` names. `/healthz` reports
+then fetches live results for whichever races `RACES` names.
+
+| Variable | Default | |
+|---|---|---|
+| `DATA_DIR` | `./data` | where the CSVs live (a mounted volume in production) |
+| `RACES` | all three | which races get *refreshed*. All three are always served and always seeded — this only controls fetching |
+| `DEFAULT_RACE` | `president` | which race a visitor **lands on**. Unrelated to `RACES` |
+| `REFRESH_SECONDS` | `900` | 60 on election night; floor is 30 |
+| `REFRESH_ENABLED` | `1` | `0` pauses fetching entirely; the site stays up serving what it has |
+| `DATA_YEAR` | race config | the cycle to pull, overriding `races.py` |
+| `FETCH_TIMEOUT` | `300` | hard kill per race | `/healthz` reports
 per-race freshness, last success and last error. A failed refresh keeps serving
 the last good data. See `DEPLOY.md` for the Railway steps.
