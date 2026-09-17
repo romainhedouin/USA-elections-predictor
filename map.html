@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>USA Election Live Predictor</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23123f8e'/><path d='M8 0h8v16H8z' fill='%23b01f24'/></svg>">
+<style>
+  /* ---------- tokens ----------
+     The map is painted from JS, which reads these same variables at render
+     time (see cssVar/COLORS), so this block is the single source of truth for
+     the palette - change a colour here and the SVG, the legend and the
+     scoreboard all follow.
+
+     The political fills were chosen against simulated protanopia,
+     deuteranopia and tritanopia (CIEDE2000 >= 20 between every pair under
+     every deficiency). Notably "Republican projected" is warm orange rather
+     than pink: a desaturated pink carries nearly all its chroma on the L-M
+     axis, which is exactly the axis red-green colour blindness removes, and
+     it collapsed into the "no data" grey. */
+  :root {
+    color-scheme: light dark;
+
+    --dem-certain:   #123f8e;
+    --dem-projected: #74a9f0;
+    --rep-certain:   #b01f24;
+    --rep-projected: #ffb37e;
+    --no-data:       #e6ebed;
+    --no-race:       #f2f4f6;
+    --no-race-line:  #d4dade;
+    --mismatch:      #0b0e14;
+    --mismatch-casing: #ffffff;
+
+    --ink: #1b2430;
+    --muted: #5b6472;
+    --border: #dfe3e8;
+    --page-bg: #f4f5f7;
+    --card-bg: #ffffff;
+    --map-stroke: #ffffff;
+    --mesh: #6b7480;
+    --chip: #f1f2f4;
+    --chip-hover: #e5e7ea;
+    --danger: #b01f24;
+
+    /* Vertical budget reserved for everything that is not the map: the map
+       is then sized to fill whatever is left, so the whole thing lands on one
+       screen. Lower it for a bigger map plus a little scroll, raise it to
+       guarantee none. */
+    --map-chrome: 23rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Polarity inverts in the dark: "certain" is the bright, saturated one. */
+      --dem-certain:   #7fb4f5;
+      --dem-projected: #2e4f80;
+      --rep-certain:   #f59a9a;
+      --rep-projected: #7d343a;
+      --no-data:       #2b323d;
+      --no-race:       #1e242d;
+      --no-race-line:  #2f3743;
+      --mismatch:      #f2f5f9;
+      --mismatch-casing: #0f1319;
+
+      --ink: #e7ebf1;
+      --muted: #98a2b3;
+      --border: #262d38;
+      --page-bg: #0f1319;
+      --card-bg: #171c24;
+      --map-stroke: #171c24;
+      --mesh: #7c8698;
+      --chip: #232a34;
+      --chip-hover: #2c3440;
+      --danger: #f59a9a;
+    }
+  }
+
+  /* ---------- base ---------- */
+  * { box-sizing: border-box; }
+  html { overflow-x: clip; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--ink);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .skip-link {
+    position: absolute; left: 0.5rem; top: -3rem; z-index: 40;
+    background: var(--card-bg); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.5rem 0.9rem; font-size: 0.85rem; text-decoration: none;
+    transition: top 0.15s ease;
+  }
+  .skip-link:focus { top: 0.5rem; }
+
+  :where(button, [tabindex="0"], a):focus-visible {
+    outline: 2px solid var(--dem-certain); outline-offset: 2px;
+  }
+
+  .page {
+    max-width: 1320px; margin: 0 auto;
+    padding: 1.5rem clamp(0.75rem, 3vw, 1.5rem) 2.5rem;
+    padding-left:  max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-left));
+    padding-right: max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-right));
+    display: flex; flex-direction: column;
+  }
+
+  /* ---------- header + race tabs ----------
+     The tabs live in the header rather than in a card of their own: it saves a
+     whole card's worth of vertical space, which is the difference between the
+     map fitting on a laptop screen and not. */
+  header {
+    display: flex; flex-wrap: wrap; align-items: flex-end;
+    justify-content: space-between; gap: 0.75rem 1.5rem; margin-bottom: 1rem;
+  }
+  header .titles { min-width: 0; }
+  header h1 { font-size: clamp(1.15rem, 1rem + 1.2vw, 1.55rem); margin: 0 0 0.2rem; letter-spacing: -0.01em; }
+  header p.subtitle { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .tabs button {
+    font: inherit; font-size: 0.88rem; line-height: 1.15; min-height: 44px;
+    padding: 0.4rem 0.95rem; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--card-bg); color: var(--muted); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem;
+  }
+  .tabs button .tab-year { font-size: 0.72rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
+  .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--page-bg); border-color: var(--ink); }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+    padding: clamp(0.9rem, 2.5vw, 1.15rem) clamp(0.9rem, 3vw, 1.5rem);
+    margin-bottom: 1rem;
+  }
+
+  /* ---------- scoreboard ---------- */
+  .scoreboard { display: flex; gap: 0.75rem 1.5rem; align-items: center; flex-wrap: wrap; }
+  .scoreboard .side { flex: 1 1 0; min-width: 0; }  /* basis 0, so the two sides never stack */
+  .scoreboard .side-label { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.15rem; }
+  .scoreboard .side-total { font-size: clamp(1.1rem, 0.85rem + 1.4vw, 1.5rem); font-weight: 600; line-height: 1.15; }
+  .scoreboard .side-breakdown { font-size: 0.78rem; color: var(--muted); }
+  .scoreboard .bar { height: 10px; border-radius: 6px; overflow: hidden; display: flex; margin: 0.25rem 0 0; flex: 1 1 100%; }
+  .scoreboard .bar div { height: 100%; }
+  .scoreboard .win-note { font-size: 0.78rem; color: var(--muted); flex: 1 1 100%; margin-top: 0.15rem; }
+
+  /* ---------- map ---------- */
+  .map-card { position: relative; }
+  .map-hint { margin: 0 0 0.75rem; font-size: 0.83rem; color: var(--muted); }
+
+  /* Solve for the width that makes the 975:610 box fit the leftover viewport
+     height exactly, so the whole map is on screen without scrolling. The
+     max(280px, ...) floor guards landscape phones, where the subtraction goes
+     negative and would otherwise collapse the map to nothing. */
+  #map {
+    display: block; margin-inline: auto;
+    width: min(100%, max(280px, calc((100svh - var(--map-chrome)) * 975 / 610)));
+    aspect-ratio: 975 / 610;
+    transition: opacity 0.25s ease;
+  }
+  #map.loading { opacity: 0; }
+
+  #loading, #error {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 1.5rem; font-size: 0.9rem; color: var(--muted);
+  }
+  #error { display: none; color: var(--danger); }
+  #error.shown { display: flex; }
+
+  .state { stroke: var(--map-stroke); stroke-width: 0.6; cursor: pointer; transition: filter 0.1s ease; }
+  .state:hover { filter: brightness(0.93); }
+  .state.no-race { cursor: default; }
+  .state.no-race:hover { filter: none; }
+  .county { stroke: var(--map-stroke); stroke-width: 0.3; }
+  .state-border { fill: none; stroke: var(--mesh); stroke-width: 0.6; pointer-events: none; }
+
+  /* Mismatch is the headline signal, so it is encoded twice over: a dark
+     stroke on a light casing (legible on all five fills) AND a dash pattern,
+     which survives greyscale and monochrome print where colour cannot.
+     non-scaling-stroke keeps it the same screen thickness in the zoomed-in
+     drill-down as on the national map. */
+  .mismatch-casing {
+    fill: none; stroke: var(--mismatch-casing); stroke-width: 5; pointer-events: none;
+    vector-effect: non-scaling-stroke;
+  }
+  .mismatch-outline {
+    fill: none; stroke: var(--mismatch); stroke-width: 2.2; pointer-events: none;
+    stroke-dasharray: 6 4; stroke-linecap: butt;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* ---------- legend ---------- */
+  #legend {
+    display: flex; gap: 0.5rem 1.1rem; flex-wrap: wrap; font-size: 0.83rem;
+    margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);
+  }
+  #legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  #legend i {
+    width: 16px; height: 16px; border-radius: 3px; display: inline-block;
+    border: 1px solid rgba(128, 128, 128, 0.3); flex: none;
+  }
+  /* The hatch that marks "projected" on the map, reproduced as a CSS gradient
+     for the flat HTML swatches. */
+  .sw-dem-projected { background: repeating-linear-gradient(45deg,  var(--dem-projected) 0 4px, var(--dem-certain) 4px 5.4px); }
+  .sw-rep-projected { background: repeating-linear-gradient(-45deg, var(--rep-projected) 0 4px, var(--rep-certain) 4px 5.4px); }
+  .sw-no-race       { background: repeating-linear-gradient(45deg,  var(--no-race) 0 4px, var(--no-race-line) 4px 5.4px); }
+  #legend .mismatch-swatch { background: var(--no-data); border: 2px dashed var(--mismatch); }
+
+  /* ---------- tooltip ---------- */
+  #tooltip {
+    position: absolute; pointer-events: none; background: rgba(20, 24, 31, 0.94); color: #fff;
+    padding: 8px 11px; border-radius: 6px; font-size: 0.8rem; line-height: 1.45; display: none;
+    z-index: 30;  /* above the drill-down overlay, or county tooltips are buried */
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25); max-width: min(240px, calc(100vw - 24px));
+  }
+
+  /* ---------- drill-down overlay ---------- */
+  #overlay {
+    display: none; position: fixed; inset: 0; background: rgba(15, 18, 24, 0.55);
+    backdrop-filter: blur(2px); align-items: center; justify-content: center; z-index: 20;
+  }
+  #overlay.open { display: flex; }
+
+  /* --vb-ratio is the open state's own aspect ratio, set from JS, so the panel
+     hugs the state instead of letterboxing a tall state in a wide box. */
+  #overlay-panel {
+    --map-cap: min(68svh, 600px);
+    background: var(--card-bg); border-radius: 14px; padding: 1.25rem 1.5rem 1.5rem;
+    width: min(92vw, 900px, calc(var(--map-cap) * var(--vb-ratio, 1.4) + 3rem));
+    min-width: min(92vw, 340px); max-height: 90svh; overflow: auto;
+    box-shadow: 0 20px 50px rgba(16, 24, 40, 0.35);
+    transform: scale(0.97); opacity: 0; transition: transform 0.16s ease, opacity 0.16s ease;
+  }
+  #overlay.open #overlay-panel { transform: scale(1); opacity: 1; }
+
+  #overlay-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; gap: 1rem; }
+  #overlay-header h2 { font-size: 1.05rem; margin: 0; }
+  #overlay-close {
+    cursor: pointer; border: none; background: var(--chip); color: var(--muted); width: 32px; height: 32px;
+    border-radius: 50%; font-size: 1.2rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+    flex: none;
+  }
+  #overlay-close:hover { background: var(--chip-hover); color: var(--ink); }
+  #overlay-note { font-size: 0.82rem; color: var(--muted); margin: 0 0 0.75rem; }
+
+  #state-map {
+    display: block; margin-inline: auto; height: auto;
+    max-height: var(--map-cap);
+    width: min(100%, calc(var(--map-cap) * var(--vb-ratio, 1.4)));
+  }
+
+  /* ---------- tablet / large phone ---------- */
+  @media (max-width: 860px) {
+    /* The tabs drop below the title here, so the map has less height to work with. */
+    :root { --map-chrome: 27rem; }
+    header { display: block; margin-bottom: 1rem; }
+    header .titles { margin-bottom: 0.85rem; }
+    .tabs { display: grid; grid-template-columns: repeat(3, 1fr); }
+    .tabs button { padding: 0.4rem 0.3rem; }
+  }
+
+  /* ---------- phone ---------- */
+  @media (max-width: 640px) {
+    .page { padding-bottom: 2rem; }
+
+    /* The map is the product: put it directly under the header and push the
+       scoreboard below it, rather than burying it under 700px of chrome. */
+    .map-card   { order: 2; }
+    .score-card { order: 3; margin-top: 1.25rem; margin-bottom: 0; }
+
+    /* Full-bleed the map card to reclaim the page gutters. */
+    .map-card {
+      margin-inline: calc(-1 * clamp(0.75rem, 3vw, 1.5rem));
+      border-radius: 0; border-left: none; border-right: none;
+      padding: 0.75rem clamp(0.75rem, 3vw, 1.5rem);
+    }
+    .map-hint { font-size: 0.78rem; margin-bottom: 0.5rem; }
+    .hint-long { display: none; }
+    #map { width: 100%; }
+
+    #legend {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0.35rem 0.75rem; font-size: 0.75rem;
+      margin-top: 0.75rem; padding-top: 0.75rem;
+    }
+    #legend .legend-wide { grid-column: 1 / -1; }
+    .scoreboard .side-breakdown { font-size: 0.72rem; }
+  }
+
+  /* ---------- drill-down as a full-screen sheet on phones and short viewports ---------- */
+  @media (max-width: 640px), (max-height: 520px) {
+    #overlay { align-items: stretch; justify-content: stretch; }
+    #overlay-panel {
+      max-width: none; max-height: none; width: 100%; height: 100dvh; min-width: 0;
+      border-radius: 0; transform: none;
+      padding: calc(1rem + env(safe-area-inset-top)) clamp(0.75rem, 3vw, 1rem)
+               calc(1rem + env(safe-area-inset-bottom));
+      display: flex; flex-direction: column;
+    }
+    #overlay.open #overlay-panel { transform: none; }
+    #overlay-close { width: 44px; height: 44px; font-size: 1.4rem; }
+    #state-map {
+      flex: 1 1 auto; min-height: 0;
+      width: 100%; height: 100%; max-width: none; max-height: none;
+    }
+  }
+
+  /* Hover tooltips never fire on touch, so stop advertising a hover affordance. */
+  @media (hover: none) {
+    .state:hover { filter: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #map, .state, #overlay-panel, .skip-link { transition: none !important; }
+    #overlay-panel, #overlay.open #overlay-panel { transform: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#scoreboard">Skip the map, go to the vote totals</a>
+
+<div class="page">
+  <header>
+    <div class="titles">
+      <h1>USA Election Live Predictor</h1>
+      <p class="subtitle" id="subtitle"></p>
+    </div>
+    <div class="tabs" id="race-tabs" aria-label="Race"></div>
+  </header>
+
+  <div class="card score-card">
+    <div class="scoreboard" id="scoreboard" aria-live="polite" aria-atomic="true"></div>
+  </div>
+
+  <div class="card map-card">
+    <p class="map-hint">Click a state to drill down to its counties.
+      <span class="hint-long">Solid means that region is done counting, hatched means it is still counting.</span></p>
+    <svg id="map" class="loading" viewBox="0 0 975 610" role="img" aria-label="Map of the United States coloured by projected winner"></svg>
+    <div id="loading" role="status">Loading map data&hellip;</div>
+    <div id="error" role="alert"></div>
+    <div id="legend">
+      <span><i style="background:var(--no-data)"></i> no data yet</span>
+      <span><i class="sw-no-race"></i> no race this cycle</span>
+      <span><i class="sw-dem-projected"></i> Democrat projected</span>
+      <span><i style="background:var(--dem-certain)"></i> Democrat certain</span>
+      <span><i class="sw-rep-projected"></i> Republican projected</span>
+      <span><i style="background:var(--rep-certain)"></i> Republican certain</span>
+      <span class="legend-wide"><i class="mismatch-swatch"></i> raw leader &ne; projected winner</span>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="overlay">
+  <div id="overlay-panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title" tabindex="-1">
+    <div id="overlay-header">
+      <h2 id="overlay-title"></h2>
+      <button id="overlay-close" type="button" aria-label="Close">&times;</button>
+    </div>
+    <p id="overlay-note"></p>
+    <svg id="state-map" role="img"></svg>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<script>
+const TOPOLOGY_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-albers-10m.json";
+const CERTAIN_THRESHOLD = 95; // % reporting above which we call a race "certain" rather than "projected"
+const DEMO_DATA = true;       // flip to false once the CSVs come from a real scrape
+const HATCH_PX = 5;           // hatch tile size, in screen pixels, for "projected" fills
+
+// Mirrors races.py - president uses electoral votes, Senate/governor use one
+// seat per in-play state. `year` is the election being reported on, which is
+// NOT the year in NBC's URLs (races.py's nbc_cycle): NBC only mints a path
+// once results exist. Duplicated here rather than generated, since this is a
+// static page with no build step; races.py is the source of truth it was
+// copied from.
+const RACE_META = {
+  president: {
+    label: "President", unit: "electoral vote", year: 2028, csv: "raw_data.csv",
+    winNote: "270 of 538 to win",
+    weights: {
+      Alabama: 9, Alaska: 3, Arizona: 11, Arkansas: 6, California: 54, Colorado: 10, Connecticut: 7,
+      Delaware: 3, "District of Columbia": 3, Florida: 30, Georgia: 16, Hawaii: 4, Idaho: 4, Illinois: 19,
+      Indiana: 11, Iowa: 6, Kansas: 6, Kentucky: 8, Louisiana: 8, Maine: 4, Maryland: 10, Massachusetts: 11,
+      Michigan: 15, Minnesota: 10, Mississippi: 6, Missouri: 10, Montana: 4, Nebraska: 5, Nevada: 6,
+      "New Hampshire": 4, "New Jersey": 14, "New Mexico": 5, "New York": 28, "North Carolina": 16,
+      "North Dakota": 3, Ohio: 17, Oklahoma: 7, Oregon: 8, Pennsylvania: 19, "Rhode Island": 4,
+      "South Carolina": 9, "South Dakota": 3, Tennessee: 11, Texas: 40, Utah: 6, Vermont: 3, Virginia: 13,
+      Washington: 12, "West Virginia": 4, Wisconsin: 10, Wyoming: 3,
+    },
+  },
+  senate: {
+    label: "Senate", unit: "seat", year: 2026, csv: "raw_data_senate.csv",
+    // Only 35 of 100 seats are on the ballot, so a seat count off this map is
+    // not a chamber count - say so rather than implying otherwise.
+    winNote: "51 of 100 for control &middot; the 65 seats not up this cycle aren't shown",
+    weights: Object.fromEntries([
+      "Alabama", "Alaska", "Arkansas", "Colorado", "Delaware", "Georgia", "Idaho", "Illinois", "Iowa",
+      "Kansas", "Kentucky", "Louisiana", "Maine", "Massachusetts", "Michigan", "Minnesota", "Mississippi",
+      "Montana", "Nebraska", "New Hampshire", "New Jersey", "New Mexico", "North Carolina", "Oklahoma",
+      "Oregon", "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Virginia",
+      "West Virginia", "Wyoming", "Florida", "Ohio",
+    ].map(s => [s, 1])),
+  },
+  governor: {
+    label: "Governor", unit: "governorship", year: 2026, csv: "raw_data_governor.csv",
+    winNote: "36 of 50 governorships on the ballot",
+    weights: Object.fromEntries([
+      "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Florida",
+      "Georgia", "Hawaii", "Idaho", "Illinois", "Iowa", "Kansas", "Maine", "Maryland", "Massachusetts",
+      "Michigan", "Minnesota", "Nebraska", "Nevada", "New Hampshire", "New Mexico", "New York", "Ohio",
+      "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee",
+      "Texas", "Vermont", "Wisconsin", "Wyoming",
+    ].map(s => [s, 1])),
+  },
+};
+
+// Read live so the OS light/dark theme, and any future palette edit, reaches
+// the SVG fills as well as the CSS-styled chrome.
+const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const COLORS = {
+  get demCertain()   { return cssVar("--dem-certain"); },
+  get demProjected() { return cssVar("--dem-projected"); },
+  get repCertain()   { return cssVar("--rep-certain"); },
+  get repProjected() { return cssVar("--rep-projected"); },
+  get noData()       { return cssVar("--no-data"); },
+  get noRace()       { return cssVar("--no-race"); },
+  get noRaceLine()   { return cssVar("--no-race-line"); },
+};
+
+const normalize = name => name.trim().toLowerCase();
+const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+
+// Tri-state on purpose: an exact tie is not a Republican lead, and calling it
+// one used to raise a bogus mismatch outline whenever the extrapolation then
+// favoured the Democrat.
+function leaderOf(dem, rep) {
+  if (dem > rep) return "D";
+  if (rep > dem) return "R";
+  return "tie";
+}
+
+function parseRaceCsv(text) {
+  const rows = d3.dsvFormat(";").parse(text);
+  if (!rows.columns || !rows.columns.includes("Percent In")) {
+    throw new Error("unexpected CSV columns: " + (rows.columns || []).join(", "));
+  }
+  return rows;
+}
+
+function buildRaceData(rows) {
+  const dataByKey = new Map();
+  const stateAggregates = new Map();
+
+  for (const row of rows) {
+    const percentIn = parseFloat(row["Percent In"]);
+    const totalVotes = +row["Total Votes"];
+    // "no data yet" placeholders, and any county with nothing counted.
+    if (!percentIn || !totalVotes) continue;
+
+    const stateKey = normalize(row["State"]);
+    const county = {
+      percentIn,
+      demReal: +row["Democrat Real"],
+      repReal: +row["Republican Real"],
+      demPredicted: +row["Democrat Predicted"],
+      repPredicted: +row["Republican Predicted"],
+      demName: row["Democrat Name"] || "Democrat",
+      repName: row["Republican Name"] || "Republican",
+    };
+    dataByKey.set(stateKey + "|" + normalize(row["County"]), county);
+
+    // A single county's raw leader and predicted leader can never actually
+    // differ - Predicted is just Real scaled by a constant (100/PercentIn),
+    // which preserves whichever candidate is ahead. The "leader flips after
+    // extrapolation" scenario only shows up once you combine many counties
+    // reporting at different rates, so mismatch/certainty is computed per
+    // STATE, aggregating every populated county row in that state.
+    const agg = stateAggregates.get(stateKey)
+      || { totalExpected: 0, totalVotes: 0, demReal: 0, repReal: 0, demPredicted: 0, repPredicted: 0 };
+    // State-wide and identical on every row of the state, so take it once
+    // rather than summing - summing divided the real reporting percentage by
+    // the county count, and no state ever reached "certain".
+    agg.totalExpected = Math.max(agg.totalExpected, +row["State Total Expected"] || 0);
+    agg.totalVotes += totalVotes;
+    agg.demReal += county.demReal;
+    agg.repReal += county.repReal;
+    agg.demPredicted += county.demPredicted;
+    agg.repPredicted += county.repPredicted;
+    stateAggregates.set(stateKey, agg);
+  }
+
+  return { dataByKey, stateAggregates };
+}
+
+function stateStatusFor(current, stateKey) {
+  const agg = current.stateAggregates.get(stateKey);
+  if (!agg) return null;
+  const rawLeader = leaderOf(agg.demReal, agg.repReal);
+  const predictedLeader = leaderOf(agg.demPredicted, agg.repPredicted);
+  const percentIn = agg.totalExpected > 0 ? (agg.totalVotes / agg.totalExpected) * 100 : 0;
+  return {
+    predictedLeader,
+    // A tie is not a flip: with nothing resolved on one side there is nothing
+    // for the extrapolation to disagree with.
+    mismatch: rawLeader !== "tie" && predictedLeader !== "tie" && rawLeader !== predictedLeader,
+    certain: Number.isFinite(percentIn) && percentIn >= CERTAIN_THRESHOLD,
+    percentIn: Number.isFinite(percentIn) ? percentIn : 0,
+  };
+}
+
+function showFatal(message) {
+  d3.select("#loading").style("display", "none");
+  d3.select("#error").classed("shown", true).text(message);
+}
+
+function fetchText(url) {
+  return fetch(url).then(response => {
+    if (!response.ok) throw new Error(`${response.status} fetching ${url}`);
+    return response.text();
+  });
+}
+
+if (typeof d3 === "undefined" || typeof topojson === "undefined") {
+  document.getElementById("loading").style.display = "none";
+  const box = document.getElementById("error");
+  box.className = "shown";
+  box.textContent = "Could not load d3 / topojson from the CDN - check your connection.";
+} else {
+  Promise.all([
+    fetch(TOPOLOGY_URL).then(r => { if (!r.ok) throw new Error(`${r.status} fetching county boundaries`); return r.json(); }),
+    fetchText(RACE_META.president.csv),
+  ])
+    .then(([topology, presidentCsvText]) => start(topology, presidentCsvText))
+    .catch(err => {
+      console.error(err);
+      showFatal(`Could not load map data (${err.message}). Serve this folder over HTTP and make sure the raw_data*.csv files sit next to map.html - run "python generate_mock_data.py --race president" to create them.`);
+    });
+}
+
+function start(topology, presidentCsvText) {
+  // `current` holds whichever race's parsed data is active - swapped out by
+  // switchRace() below; everything else (topology, DOM) is built once.
+  let current = { race: "president", ...buildRaceData(parseRaceCsv(presidentCsvText)) };
+  let pendingRace = 0; // guards against a slow fetch landing after a newer one
+
+  const stateStatus = stateKey => stateStatusFor(current, stateKey);
+  const hasRace = stateName => RACE_META[current.race].weights[stateName] !== undefined;
+
+  const stateNameByFips = new Map(
+    topology.objects.states.geometries.map(g => [g.id, g.properties.name])
+  );
+  const fipsByStateName = new Map(
+    topology.objects.states.geometries.map(g => [normalize(g.properties.name), g.id])
+  );
+
+  const allCounties = topojson.feature(topology, topology.objects.counties).features;
+  const allStates = topojson.feature(topology, topology.objects.states).features;
+  const statesMesh = topojson.mesh(topology, topology.objects.states, (a, b) => a !== b);
+
+  const tooltip = d3.select("#tooltip");
+  const nationalSvg = d3.select("#map");
+  const stateSvg = d3.select("#state-map");
+  const overlay = d3.select("#overlay");
+  const nationalPath = d3.geoPath();
+
+  // ---------- fills ----------
+  // "Projected" is drawn as a hatch rather than just a lighter tint. A tint
+  // alone puts the whole certain/projected distinction on lightness, which
+  // vanishes in greyscale and in print; the hatch direction also re-encodes
+  // the party, so a monochrome render stays readable.
+  //
+  // patternUnits="userSpaceOnUse" is in viewBox units, and the two SVGs sit at
+  // wildly different scales (the national map is about 1 unit per pixel, a
+  // state drill-down more like 0.17), so each gets its own defs sized for
+  // itself - hence the id suffix. Duplicate ids across the two SVGs would
+  // silently resolve to whichever came first in the document.
+  function buildDefs(svgSel, ns, scale) {
+    svgSel.select("defs").remove();
+    const defs = svgSel.append("defs");
+    const tile = HATCH_PX * scale;
+    const hatch = (id, base, line, angle) => {
+      const pattern = defs.append("pattern")
+        .attr("id", `${id}-${ns}`)
+        .attr("patternUnits", "userSpaceOnUse")
+        .attr("width", tile).attr("height", tile)
+        .attr("patternTransform", `rotate(${angle})`);
+      pattern.append("rect").attr("width", tile).attr("height", tile).attr("fill", base);
+      pattern.append("line")
+        .attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", tile)
+        .attr("stroke", line).attr("stroke-width", tile * 0.28);
+    };
+    hatch("hatch-dem", COLORS.demProjected, COLORS.demCertain, 45);
+    hatch("hatch-rep", COLORS.repProjected, COLORS.repCertain, -45);
+    hatch("hatch-none", COLORS.noRace, COLORS.noRaceLine, 45);
+  }
+
+  function scaleFor(svgSel, viewBoxWidth) {
+    const width = svgSel.node().getBoundingClientRect().width;
+    return width > 0 ? viewBoxWidth / width : 1;
+  }
+
+  function leaderFill(leader, certain, ns) {
+    if (leader === "D") return certain ? COLORS.demCertain : `url(#hatch-dem-${ns})`;
+    if (leader === "R") return certain ? COLORS.repCertain : `url(#hatch-rep-${ns})`;
+    return COLORS.noData; // tie, or nothing resolved yet
+  }
+
+  function stateFill(status, stateName, ns) {
+    if (!hasRace(stateName)) return `url(#hatch-none-${ns})`;
+    if (!status) return COLORS.noData;
+    return leaderFill(status.predictedLeader, status.certain, ns);
+  }
+
+  // A county's own Percent In tells us whether ITS count is done, separately
+  // from whether its state overall is "certain" - a fully-reported county
+  // inside a barely-reported state should still read as done counting.
+  function countyFill(data, ns) {
+    if (!data) return COLORS.noData;
+    return leaderFill(leaderOf(data.demPredicted, data.repPredicted), data.percentIn >= CERTAIN_THRESHOLD, ns);
+  }
+
+  // ---------- tooltip ----------
+  function showTooltip(event, html) {
+    const node = tooltip.style("display", "block").html(html).node();
+    const width = node.offsetWidth;
+    const flip = event.pageX + 12 + width > window.innerWidth - 8;
+    tooltip
+      .style("left", (flip ? event.pageX - 12 - width : event.pageX + 12) + "px")
+      .style("top", (event.pageY + 12) + "px");
+  }
+  const hideTooltip = () => tooltip.style("display", "none");
+  document.addEventListener("pointerdown", event => {
+    if (!event.target.closest("path.state, path.county")) hideTooltip();
+  });
+
+  function countyInfo(feature) {
+    const stateName = stateNameByFips.get(feature.id.slice(0, 2));
+    const stateKey = normalize(stateName || "");
+    return { stateName, stateKey, data: current.dataByKey.get(stateKey + "|" + normalize(feature.properties.name)) };
+  }
+
+  function stateSummary(stateName, status) {
+    if (!hasRace(stateName)) return `No ${RACE_META[current.race].label} race in ${RACE_META[current.race].year}`;
+    if (!status) return "No data yet";
+    if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, tied`;
+    const leaderName = status.predictedLeader === "D" ? "Democrat" : "Republican";
+    return `${status.percentIn.toFixed(0)}% in, ${status.certain ? "certain" : "projected"} ${leaderName}`
+      + (status.mismatch ? " (raw leader currently disagrees)" : "");
+  }
+
+  // ---------- county rendering (used by the drill-down) ----------
+  function renderCounties(svgSelection, features, path, ns) {
+    svgSelection.append("g")
+      .selectAll("path")
+      .data(features)
+      .join("path")
+      .attr("class", "county")
+      .attr("fill", d => countyFill(countyInfo(d).data, ns))
+      .attr("d", path)
+      .on("mousemove", (event, d) => {
+        const { stateName, stateKey, data } = countyInfo(d);
+        let html = `<strong>${d.properties.name}, ${stateName || "?"}</strong><br>`;
+        if (!data) {
+          html += "No data yet";
+        } else {
+          const nameOf = leader => (leader === "D" ? data.demName : leader === "R" ? data.repName : "Nobody");
+          html += `${+data.percentIn.toFixed(1)}% in &middot; ${data.percentIn >= CERTAIN_THRESHOLD ? "done counting" : "still counting"}<br>`
+            + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R (${nameOf(leaderOf(data.demReal, data.repReal))} leads)<br>`
+            + `Predicted: ${data.demPredicted.toLocaleString()} D / ${data.repPredicted.toLocaleString()} R (${nameOf(leaderOf(data.demPredicted, data.repPredicted))} projected)`;
+          const status = stateStatus(stateKey);
+          if (status && status.mismatch) html += "<br><strong>State-wide: raw leader &ne; projected winner</strong>";
+        }
+        showTooltip(event, html);
+      })
+      .on("mouseleave", hideTooltip);
+  }
+
+  // ---------- national state-level view ----------
+  function renderNational() {
+    nationalSvg.selectAll("*").remove();
+    buildDefs(nationalSvg, "nat", scaleFor(nationalSvg, 975));
+
+    nationalSvg.append("g")
+      .selectAll("path")
+      .data(allStates)
+      .join("path")
+      .attr("class", d => "state" + (hasRace(d.properties.name) ? "" : " no-race"))
+      .attr("fill", d => stateFill(stateStatus(normalize(d.properties.name)), d.properties.name, "nat"))
+      .attr("d", nationalPath)
+      .attr("tabindex", d => (hasRace(d.properties.name) ? 0 : null))
+      .attr("role", d => (hasRace(d.properties.name) ? "button" : null))
+      .attr("aria-label", d => `${d.properties.name}: ${stateSummary(d.properties.name, stateStatus(normalize(d.properties.name)))}`)
+      .on("mousemove", (event, d) => {
+        showTooltip(event, `<strong>${d.properties.name}</strong><br>${stateSummary(d.properties.name, stateStatus(normalize(d.properties.name)))}`);
+      })
+      .on("mouseleave", hideTooltip)
+      .on("click", (event, d) => { if (hasRace(d.properties.name)) openStateOverlay(d); })
+      .on("keydown", (event, d) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        if (hasRace(d.properties.name)) openStateOverlay(d);
+      });
+
+    nationalSvg.append("path")
+      .datum(statesMesh)
+      .attr("class", "state-border")
+      .attr("d", nationalPath);
+
+    const mismatched = allStates.filter(d => stateStatus(normalize(d.properties.name))?.mismatch);
+    const group = nationalSvg.append("g");
+    group.selectAll("path.mismatch-casing").data(mismatched).join("path")
+      .attr("class", "mismatch-casing").attr("d", nationalPath);
+    group.selectAll("path.mismatch-outline").data(mismatched).join("path")
+      .attr("class", "mismatch-outline").attr("d", nationalPath);
+  }
+
+  // ---------- scoreboard ----------
+  function renderScoreboard() {
+    const meta = RACE_META[current.race];
+    const buckets = { demCertain: 0, demProjected: 0, repCertain: 0, repProjected: 0, undecided: 0 };
+
+    for (const [stateName, weight] of Object.entries(meta.weights)) {
+      const status = stateStatus(normalize(stateName));
+      if (!status || status.predictedLeader === "tie") { buckets.undecided += weight; continue; }
+      buckets[(status.predictedLeader === "D" ? "dem" : "rep") + (status.certain ? "Certain" : "Projected")] += weight;
+    }
+
+    const demTotal = buckets.demCertain + buckets.demProjected;
+    const repTotal = buckets.repCertain + buckets.repProjected;
+    const total = demTotal + repTotal + buckets.undecided;
+    const pct = n => (total ? (n / total) * 100 : 0);
+
+    d3.select("#scoreboard").html(`
+      <div class="side">
+        <div class="side-label">Democrat</div>
+        <div class="side-total" style="color:var(--dem-certain)">${plural(demTotal, meta.unit)}</div>
+        <div class="side-breakdown">${buckets.demCertain.toLocaleString()} certain &middot; ${buckets.demProjected.toLocaleString()} projected</div>
+      </div>
+      <div class="side" style="text-align:right">
+        <div class="side-label">Republican</div>
+        <div class="side-total" style="color:var(--rep-certain)">${plural(repTotal, meta.unit)}</div>
+        <div class="side-breakdown">${buckets.repCertain.toLocaleString()} certain &middot; ${buckets.repProjected.toLocaleString()} projected</div>
+      </div>
+      <div class="bar">
+        <div style="width:${pct(buckets.demCertain)}%;background:var(--dem-certain)"></div>
+        <div class="sw-dem-projected" style="width:${pct(buckets.demProjected)}%"></div>
+        <div style="width:${pct(buckets.undecided)}%;background:var(--no-data)"></div>
+        <div class="sw-rep-projected" style="width:${pct(buckets.repProjected)}%"></div>
+        <div style="width:${pct(buckets.repCertain)}%;background:var(--rep-certain)"></div>
+      </div>
+      <div class="win-note">${plural(buckets.undecided, meta.unit)} not yet decided &middot; ${meta.winNote}</div>
+    `);
+  }
+
+  // ---------- race tabs ----------
+  function renderRaceTabs() {
+    d3.select("#race-tabs").selectAll("button")
+      .data(Object.keys(RACE_META))
+      .join("button")
+      .attr("type", "button")
+      .attr("aria-pressed", race => race === current.race)
+      .html(race => `<span>${RACE_META[race].label}</span><span class="tab-year">${RACE_META[race].year}</span>`)
+      .on("click", (event, race) => switchRace(race));
+
+    const meta = RACE_META[current.race];
+    d3.select("#subtitle").text(
+      `${DEMO_DATA ? "Demo data" : "NBC News data"} · ${meta.label} ${meta.year} · county results extrapolated to full reporting`
+    );
+    nationalSvg.attr("aria-label", `Map of the United States coloured by projected ${meta.label} winner, ${meta.year}`);
+  }
+
+  function switchRace(race) {
+    if (race === current.race) return;
+    const token = ++pendingRace;
+    fetchText(RACE_META[race].csv)
+      .then(csvText => {
+        if (token !== pendingRace) return; // a newer tab click already won
+        current = { race, ...buildRaceData(parseRaceCsv(csvText)) };
+        closeOverlay();
+        renderRaceTabs();
+        renderNational();
+        renderScoreboard();
+      })
+      .catch(err => {
+        if (token !== pendingRace) return;
+        console.error(err);
+        // Leave `current` (and so the highlighted tab) on the race whose data
+        // is actually on screen, rather than claiming one we never parsed.
+        d3.select("#error").classed("shown", true)
+          .text(`Could not load ${RACE_META[race].csv} (${err.message}). Run "python generate_mock_data.py --race ${race}".`);
+        setTimeout(() => d3.select("#error").classed("shown", false), 6000);
+      });
+  }
+
+  // ---------- state drill-down overlay ----------
+  let lastFocused = null;
+
+  function openStateOverlay(stateFeature) {
+    const stateName = stateFeature.properties.name;
+    const fips = fipsByStateName.get(normalize(stateName));
+    const countiesInState = allCounties.filter(c => c.id.slice(0, 2) === fips);
+    const countyIds = new Set(countiesInState.map(c => c.id));
+
+    stateSvg.selectAll("*").remove();
+
+    const path = d3.geoPath();
+    const [[x0, y0], [x1, y1]] = path.bounds({ type: "FeatureCollection", features: countiesInState });
+    const pad = Math.max(x1 - x0, y1 - y0) * 0.04;
+    const vbWidth = x1 - x0 + pad * 2;
+    const vbHeight = y1 - y0 + pad * 2;
+    stateSvg.attr("viewBox", `${x0 - pad} ${y0 - pad} ${vbWidth} ${vbHeight}`);
+    // Drives the panel's width, so it hugs a tall state like California
+    // instead of letterboxing it in a wide box.
+    d3.select("#overlay-panel").style("--vb-ratio", vbWidth / vbHeight);
+
+    const status = stateStatus(normalize(stateName));
+    d3.select("#overlay-title").text(stateName);
+    d3.select("#overlay-note").text(stateSummary(stateName, status));
+    stateSvg.attr("aria-label", `${stateName} counties: ${stateSummary(stateName, status)}`);
+
+    lastFocused = document.activeElement;
+    overlay.classed("open", true); // open first: a hidden SVG has no width to measure
+
+    buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth));
+    renderCounties(stateSvg, countiesInState, path, "st");
+
+    stateSvg.append("path")
+      .datum(topojson.mesh(topology, topology.objects.counties, (a, b) => a !== b && countyIds.has(a.id) && countyIds.has(b.id)))
+      .attr("class", "state-border")
+      .attr("d", path);
+
+    if (status && status.mismatch) {
+      stateSvg.append("path").datum(stateFeature).attr("class", "mismatch-casing").attr("d", path);
+      stateSvg.append("path").datum(stateFeature).attr("class", "mismatch-outline").attr("d", path);
+    }
+
+    document.getElementById("overlay-panel").focus();
+  }
+
+  function closeOverlay() {
+    if (!overlay.classed("open")) return;
+    overlay.classed("open", false);
+    hideTooltip();
+    if (lastFocused && lastFocused.isConnected) lastFocused.focus();
+    lastFocused = null;
+  }
+
+  d3.select("#overlay-close").on("click", closeOverlay);
+  overlay.on("click", event => { if (event.target.id === "overlay") closeOverlay(); });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeOverlay();
+  });
+
+  // ---------- re-render triggers ----------
+  // The hatch tile is sized in viewBox units to hit a target screen size, so
+  // it has to be rebuilt whenever the map's rendered width changes; the
+  // palette has to be re-read whenever the OS theme flips.
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderNational, 150);
+  });
+  window.matchMedia("(prefers-color-scheme: dark)")
+    .addEventListener("change", () => { renderNational(); renderScoreboard(); });
+
+  renderRaceTabs();
+  renderNational();
+  renderScoreboard();
+
+  d3.select("#loading").style("display", "none");
+  nationalSvg.classed("loading", false);
+}
+</script>
+</body>
+</html>

@@ -1,2 +1,4 @@
 states/
 *.csv
+__pycache__/
+*.pyc
