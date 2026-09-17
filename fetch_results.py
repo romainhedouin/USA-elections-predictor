@@ -98,7 +98,7 @@ def write_meta(output_csv, race, cycle, rows, source, last_modified=None):
         "race": race,
         "label": config["label"],
         "electionYear": config["election_year"],
-        "nbcCycle": cycle,
+        "dataYear": cycle,
         "source": source,
         "fetchedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "sourceLastModified": last_modified,
@@ -141,7 +141,7 @@ def main():
         sys.exit(f"No results parsed - refusing to overwrite {output_csv}.")
 
     write_csv(rows, output_csv)
-    write_meta(output_csv, args.race, cycle, rows, source="nbc", last_modified=last_modified)
+    write_meta(output_csv, args.race, cycle, rows, source="live", last_modified=last_modified)
     states = len({row[0] for row in rows})
     print(f"Wrote {len(rows)} rows across {states} states to {output_csv}")
 

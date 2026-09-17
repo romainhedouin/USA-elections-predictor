@@ -388,12 +388,11 @@ const CERTAIN_THRESHOLD = 95; // % reporting above which we call a race "certain
 const HATCH_PX = 5;           // hatch tile size, in screen pixels, for "projected" fills
 const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
 
-// Mirrors races.py - president uses electoral votes, Senate/governor use one
-// seat per in-play state. `year` is the election being reported on, which is
-// NOT the year in NBC's URLs (races.py's nbc_cycle): NBC only mints a path
-// once results exist. Duplicated here rather than generated, since this is a
-// static page with no build step; races.py is the source of truth it was
-// copied from.
+// President uses electoral votes, Senate/governor one seat per in-play state.
+// `year` is the election being reported on, which is not necessarily the year
+// the numbers come from - upstream only publishes a cycle once it has results.
+// Duplicated here rather than generated, since this is a static page with no
+// build step.
 const RACE_META = {
   president: {
     label: "President", unit: "electoral vote", year: 2028, csv: "raw_data.csv",
@@ -511,7 +510,7 @@ function buildRaceData(rows) {
     // shapes. Matching on names instead used to paint 10 states wrong - a New
     // England county coloured from the one town that shares its name, and
     // Brooklyn/Baltimore City/Fairfax City silently dropped or doubled.
-    // Rows with no FIPS are states NBC reports below county level; they still
+    // Rows with no FIPS are states reported below county level; they still
     // count towards the state aggregate, they just have nothing to draw.
     if (row["FIPS"]) dataByKey.set(row["FIPS"], area);
 
@@ -548,7 +547,7 @@ function stateStatusFor(current, stateKey) {
   return {
     predictedLeader,
     geography: agg.geography,
-    // NBC reports eight states by township, municipality, ward or legislative
+    // Eight states report by township, municipality, ward or legislative
     // district. Their state totals are fine; they simply have no county split.
     countyLevel: agg.geography === "counties" || agg.geography === "parishes",
     // A tie is not a flip: with nothing resolved on one side there is nothing
@@ -864,9 +863,8 @@ function start(topology, president) {
   }
 
   // Say plainly what is on screen. The awkward case is real results from a
-  // cycle other than the one the tab names - NBC only publishes a cycle once
-  // it has results, so a 2028 tab can only ever show older real numbers until
-  // election night.
+  // cycle other than the one the tab names: a cycle is only published once it
+  // has results, so a 2028 tab can only show older real numbers until then.
   function renderSubtitle() {
     const meta = RACE_META[current.race];
     const info = current.meta;
@@ -878,11 +876,11 @@ function start(topology, president) {
     } else if (info.source === "mock") {
       badge = '<span class="badge demo">Demo data</span>';
       parts.push(`Illustrative ${meta.label} ${meta.year} figures — no votes have been cast`);
-    } else if (String(info.nbcCycle) !== String(info.electionYear)) {
-      badge = '<span class="badge">NBC News</span>';
-      parts.push(`${info.nbcCycle} ${meta.label} results — live ${info.electionYear} coverage starts when NBC publishes it`);
+    } else if (String(info.dataYear) !== String(info.electionYear)) {
+      badge = '<span class="badge">Live results</span>';
+      parts.push(`${info.dataYear} ${meta.label} results — live ${info.electionYear} coverage begins once results are published`);
     } else {
-      badge = '<span class="badge">NBC News</span>';
+      badge = '<span class="badge">Live results</span>';
       parts.push(`${meta.label} ${info.electionYear} results`);
     }
     if (info) {
@@ -944,8 +942,8 @@ function start(topology, president) {
 
     const status = stateStatus(normalize(stateName));
     const note = status && !status.countyLevel
-      ? `${stateSummary(stateName, status)} — NBC reports this state by `
-        + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}, so there is no county breakdown.`
+      ? `${stateSummary(stateName, status)} — this state reports by `
+        + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()} rather than by county, so there is no county breakdown.`
       : stateSummary(stateName, status);
     d3.select("#overlay-title").text(stateName);
     d3.select("#overlay-note").text(note);
