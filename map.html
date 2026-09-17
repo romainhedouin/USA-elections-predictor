@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>USA Election Live Predictor</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23123f8e'/><path d='M8 0h8v16H8z' fill='%23b01f24'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%2300337c'/><path d='M8 0h8v16H8z' fill='%23ce3e39'/></svg>">
 <style>
   /* ---------- tokens ----------
      The map is painted from JS, which reads these same variables at render
@@ -17,13 +17,15 @@
      every deficiency). Notably "Republican projected" is warm orange rather
      than pink: a desaturated pink carries nearly all its chroma on the L-M
      axis, which is exactly the axis red-green colour blindness removes, and
-     it collapsed into the "no data" grey. */
+     it collapsed into the "no data" grey. The two solid fills are additionally
+     spread far enough apart in lightness to stay distinct in greyscale, where
+     hue carries nothing at all. */
   :root {
     color-scheme: light dark;
 
-    --dem-certain:   #123f8e;
+    --dem-certain:   #00337c;
     --dem-projected: #74a9f0;
-    --rep-certain:   #b01f24;
+    --rep-certain:   #ce3e39;
     --rep-projected: #ffb37e;
     --no-data:       #e6ebed;
     --no-race:       #f2f4f6;
@@ -52,9 +54,9 @@
   @media (prefers-color-scheme: dark) {
     :root {
       /* Polarity inverts in the dark: "certain" is the bright, saturated one. */
-      --dem-certain:   #7fb4f5;
+      --dem-certain:   #4d87c5;
       --dem-projected: #2e4f80;
-      --rep-certain:   #f59a9a;
+      --rep-certain:   #ffb7b6;
       --rep-projected: #7d343a;
       --no-data:       #2b323d;
       --no-race:       #1e242d;
@@ -169,8 +171,12 @@
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     text-align: center; padding: 1.5rem; font-size: 0.9rem; color: var(--muted);
   }
-  #error { display: none; color: var(--danger); }
+  #error { display: none; color: var(--danger); pointer-events: none; }
   #error.shown { display: flex; }
+  #error span {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.75rem 1rem; max-width: 34rem; box-shadow: 0 4px 16px rgba(16, 24, 40, 0.14);
+  }
 
   .state { stroke: var(--map-stroke); stroke-width: 0.6; cursor: pointer; transition: filter 0.1s ease; }
   .state:hover { filter: brightness(0.93); }
@@ -322,7 +328,7 @@
 </style>
 </head>
 <body>
-<a class="skip-link" href="#scoreboard">Skip the map, go to the vote totals</a>
+<a class="skip-link" href="#legend">Skip past the map</a>
 
 <div class="page">
   <header>
@@ -330,7 +336,7 @@
       <h1>USA Election Live Predictor</h1>
       <p class="subtitle" id="subtitle"></p>
     </div>
-    <div class="tabs" id="race-tabs" aria-label="Race"></div>
+    <div class="tabs" id="race-tabs" role="group" aria-label="Race"></div>
   </header>
 
   <div class="card score-card">
@@ -343,7 +349,7 @@
     <svg id="map" class="loading" viewBox="0 0 975 610" role="img" aria-label="Map of the United States coloured by projected winner"></svg>
     <div id="loading" role="status">Loading map data&hellip;</div>
     <div id="error" role="alert"></div>
-    <div id="legend">
+    <div id="legend" tabindex="-1">
       <span><i style="background:var(--no-data)"></i> no data yet</span>
       <span><i class="sw-no-race"></i> no race this cycle</span>
       <span><i class="sw-dem-projected"></i> Democrat projected</span>
@@ -517,9 +523,15 @@ function stateStatusFor(current, stateKey) {
   };
 }
 
+function setErrorText(message) {
+  const box = d3.select("#error");
+  box.selectAll("span").data([message]).join("span").text(d => d);
+  return box;
+}
+
 function showFatal(message) {
   d3.select("#loading").style("display", "none");
-  d3.select("#error").classed("shown", true).text(message);
+  setErrorText(message).classed("shown", true);
 }
 
 function fetchText(url) {
@@ -533,7 +545,8 @@ if (typeof d3 === "undefined" || typeof topojson === "undefined") {
   document.getElementById("loading").style.display = "none";
   const box = document.getElementById("error");
   box.className = "shown";
-  box.textContent = "Could not load d3 / topojson from the CDN - check your connection.";
+  box.innerHTML = "<span></span>";
+  box.firstChild.textContent = "Could not load d3 / topojson from the CDN - check your connection.";
 } else {
   Promise.all([
     fetch(TOPOLOGY_URL).then(r => { if (!r.ok) throw new Error(`${r.status} fetching county boundaries`); return r.json(); }),
@@ -584,7 +597,6 @@ function start(topology, presidentCsvText) {
   // itself - hence the id suffix. Duplicate ids across the two SVGs would
   // silently resolve to whichever came first in the document.
   function buildDefs(svgSel, ns, scale) {
-    svgSel.select("defs").remove();
     const defs = svgSel.append("defs");
     const tile = HATCH_PX * scale;
     const hatch = (id, base, line, angle) => {
@@ -594,8 +606,10 @@ function start(topology, presidentCsvText) {
         .attr("width", tile).attr("height", tile)
         .attr("patternTransform", `rotate(${angle})`);
       pattern.append("rect").attr("width", tile).attr("height", tile).attr("fill", base);
+      // Centre the stripe inside the tile: on the edge, half of it falls
+      // outside and is clipped away, and the tiling stops being seamless.
       pattern.append("line")
-        .attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", tile)
+        .attr("x1", tile / 2).attr("y1", 0).attr("x2", tile / 2).attr("y2", tile)
         .attr("stroke", line).attr("stroke-width", tile * 0.28);
     };
     hatch("hatch-dem", COLORS.demProjected, COLORS.demCertain, 45);
@@ -629,13 +643,22 @@ function start(topology, presidentCsvText) {
   }
 
   // ---------- tooltip ----------
+  let touchTooltipTimer;
   function showTooltip(event, html) {
-    const node = tooltip.style("display", "block").html(html).node();
+    clearTimeout(touchTooltipTimer);
+    // Park it at the left edge before measuring: at its previous `left` the
+    // shrink-to-fit width is clamped by the remaining space, not the content.
+    const node = tooltip.style("display", "block").style("left", "0px").html(html).node();
     const width = node.offsetWidth;
     const flip = event.pageX + 12 + width > window.innerWidth - 8;
     tooltip
       .style("left", (flip ? event.pageX - 12 - width : event.pageX + 12) + "px")
       .style("top", (event.pageY + 12) + "px");
+    // A tap synthesises a mousemove, so touch users get a tooltip with no
+    // pointerleave to ever dismiss it. Time it out instead of stranding it.
+    if (!window.matchMedia("(hover: hover)").matches) {
+      touchTooltipTimer = setTimeout(hideTooltip, 2500);
+    }
   }
   const hideTooltip = () => tooltip.style("display", "none");
   document.addEventListener("pointerdown", event => {
@@ -686,6 +709,12 @@ function start(topology, presidentCsvText) {
 
   // ---------- national state-level view ----------
   function renderNational() {
+    // selectAll("*").remove() destroys the focused state path, so remember
+    // which one it was and hand focus back after the redraw.
+    const active = document.activeElement;
+    const focusedState = active && active.classList && active.classList.contains("state")
+      ? d3.select(active).datum().properties.name : null;
+
     nationalSvg.selectAll("*").remove();
     buildDefs(nationalSvg, "nat", scaleFor(nationalSvg, 975));
 
@@ -715,12 +744,19 @@ function start(topology, presidentCsvText) {
       .attr("class", "state-border")
       .attr("d", nationalPath);
 
-    const mismatched = allStates.filter(d => stateStatus(normalize(d.properties.name))?.mismatch);
+    const mismatched = allStates.filter(
+      d => hasRace(d.properties.name) && stateStatus(normalize(d.properties.name))?.mismatch);
     const group = nationalSvg.append("g");
     group.selectAll("path.mismatch-casing").data(mismatched).join("path")
       .attr("class", "mismatch-casing").attr("d", nationalPath);
     group.selectAll("path.mismatch-outline").data(mismatched).join("path")
       .attr("class", "mismatch-outline").attr("d", nationalPath);
+
+    if (focusedState) {
+      const node = nationalSvg.selectAll("path.state")
+        .filter(d => d.properties.name === focusedState).node();
+      if (node) node.focus();
+    }
   }
 
   // ---------- scoreboard ----------
@@ -779,13 +815,15 @@ function start(topology, presidentCsvText) {
   }
 
   function switchRace(race) {
-    if (race === current.race) return;
+    // Bump first: clicking back to the current race must cancel whatever is
+    // already in flight, not just decline to start a second request.
     const token = ++pendingRace;
+    if (race === current.race) return;
     fetchText(RACE_META[race].csv)
       .then(csvText => {
         if (token !== pendingRace) return; // a newer tab click already won
         current = { race, ...buildRaceData(parseRaceCsv(csvText)) };
-        closeOverlay();
+        closeOverlay({ restoreFocus: false }); // renderNational() is about to delete that node
         renderRaceTabs();
         renderNational();
         renderScoreboard();
@@ -795,14 +833,17 @@ function start(topology, presidentCsvText) {
         console.error(err);
         // Leave `current` (and so the highlighted tab) on the race whose data
         // is actually on screen, rather than claiming one we never parsed.
-        d3.select("#error").classed("shown", true)
-          .text(`Could not load ${RACE_META[race].csv} (${err.message}). Run "python generate_mock_data.py --race ${race}".`);
-        setTimeout(() => d3.select("#error").classed("shown", false), 6000);
+        setErrorText(`Could not load ${RACE_META[race].csv} (${err.message}). Run "python generate_mock_data.py --race ${race}".`)
+          .classed("shown", true);
+        clearTimeout(errorTimer);
+        errorTimer = setTimeout(() => d3.select("#error").classed("shown", false), 6000);
       });
   }
 
   // ---------- state drill-down overlay ----------
   let lastFocused = null;
+  let openStateFeature = null;   // so a resize / theme flip can redraw the drill-down
+  let errorTimer;
 
   function openStateOverlay(stateFeature) {
     const stateName = stateFeature.properties.name;
@@ -828,6 +869,9 @@ function start(topology, presidentCsvText) {
     stateSvg.attr("aria-label", `${stateName} counties: ${stateSummary(stateName, status)}`);
 
     lastFocused = document.activeElement;
+    openStateFeature = stateFeature;
+    hideTooltip(); // a tap synthesises a hover, which would strand a tooltip over the sheet
+    setBackgroundInert(true);
     overlay.classed("open", true); // open first: a hidden SVG has no width to measure
 
     buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth));
@@ -846,31 +890,66 @@ function start(topology, presidentCsvText) {
     document.getElementById("overlay-panel").focus();
   }
 
-  function closeOverlay() {
+  function closeOverlay({ restoreFocus = true } = {}) {
     if (!overlay.classed("open")) return;
     overlay.classed("open", false);
+    openStateFeature = null;
     hideTooltip();
-    if (lastFocused && lastFocused.isConnected) lastFocused.focus();
+    setBackgroundInert(false);
+    if (restoreFocus && lastFocused && lastFocused.isConnected) lastFocused.focus();
     lastFocused = null;
   }
 
-  d3.select("#overlay-close").on("click", closeOverlay);
+  // aria-modal="true" tells assistive tech the background does not exist, so
+  // the background had better actually be unreachable - otherwise Tab walks
+  // straight out of the dialog into content screen readers were told to ignore.
+  function setBackgroundInert(on) {
+    document.querySelectorAll(".page, .skip-link").forEach(el => { el.inert = on; });
+  }
+
+  d3.select("#overlay-close").on("click", () => closeOverlay());
   overlay.on("click", event => { if (event.target.id === "overlay") closeOverlay(); });
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape") closeOverlay();
+    if (event.key === "Escape") { closeOverlay(); return; }
+    if (event.key !== "Tab" || !overlay.classed("open")) return;
+    // Belt and braces alongside `inert`, which older browsers ignore.
+    const panel = document.getElementById("overlay-panel");
+    const focusable = [...panel.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])')];
+    if (!focusable.length) { event.preventDefault(); panel.focus(); return; }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus();
+    }
   });
 
   // ---------- re-render triggers ----------
   // The hatch tile is sized in viewBox units to hit a target screen size, so
   // it has to be rebuilt whenever the map's rendered width changes; the
   // palette has to be re-read whenever the OS theme flips.
+  function redrawAll() {
+    renderNational();
+    // The drill-down has its own defs and its own baked-in fill attributes, so
+    // it needs redrawing too - otherwise it keeps the old theme's colours, or a
+    // hatch sized for the old window.
+    if (openStateFeature) {
+      const feature = openStateFeature;
+      const restore = lastFocused;
+      closeOverlay({ restoreFocus: false });
+      openStateOverlay(feature);
+      lastFocused = restore;
+    }
+  }
+
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(renderNational, 150);
+    resizeTimer = setTimeout(redrawAll, 150);
   });
   window.matchMedia("(prefers-color-scheme: dark)")
-    .addEventListener("change", () => { renderNational(); renderScoreboard(); });
+    .addEventListener("change", () => { redrawAll(); renderScoreboard(); });
 
   renderRaceTabs();
   renderNational();

@@ -28,8 +28,7 @@ consumers (e.g. a county map) should already treat as "no data".
 import argparse
 import csv
 
-from races import RACES, race_files
-from generate_raw_data import CSV_HEADER
+from races import CSV_HEADER, RACES, race_files
 
 # Per-county scenario data, keyed by state name (races.py's weight tables use
 # the same proper names). Each race only uses the subset of these states it
@@ -138,7 +137,9 @@ def main():
         writer.writerow(CSV_HEADER)
         writer.writerows(rows)
 
+    race = RACES[args.race]
     print(f"Wrote {len(rows)} rows ({len(data_states)} states with data, {len(in_play_states) - len(data_states)} with none yet) to {output_csv}")
+    print(f"Mock {race['label']} {race['election_year']} data - not a real result.")
 
 
 if __name__ == "__main__":

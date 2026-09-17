@@ -34,14 +34,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from races import RACES, race_files
+from races import CSV_HEADER, RACES, race_files
 
 BASE_URL = "https://www.nbcnews.com"
-CSV_HEADER = [
-    "State", "County", "State Total Expected", "Total Votes", "Percent In",
-    "Democrat Real", "Republican Real", "Democrat Predicted", "Republican Predicted",
-    "Democrat Name", "Republican Name",
-]
 
 
 def _make_driver(headless):
@@ -55,10 +50,10 @@ def _make_driver(headless):
 def grab_data(race, nbc_cycle, skip, headless):
     """Scrape each state's results page into states/<race>/<state>/raw_div.txt.
 
-    Scrapes every slug in the race's states file minus --skip; it deliberately
-    does NOT intersect with RACES[race]["weights"], because those tables are
-    hand-maintained and would silently drop special elections NBC is actually
-    publishing.
+    Returns (scraped_state_names, failed_slugs). Scrapes every slug in the
+    race's states file minus --skip; it deliberately does NOT intersect with
+    RACES[race]["weights"], because those tables are hand-maintained and would
+    silently drop special elections NBC is actually publishing.
     """
     paths = race_files(race)
     states_file = paths["nbc_states_file"]
@@ -69,23 +64,23 @@ def grab_data(race, nbc_cycle, skip, headless):
     todo = [state for state in states if state not in skip]
 
     driver = _make_driver(headless)
-    failures = []
+    scraped, failures = set(), []
     try:
         for state in todo:
-            if not _grab_state(driver, state, race, nbc_cycle, paths["states_dir"]):
+            state_name = _grab_state(driver, state, race, nbc_cycle, paths["states_dir"])
+            if state_name:
+                scraped.add(state_name)
+            else:
                 failures.append(state)
     finally:
         driver.quit()
 
-    print(f"Scraped {len(todo) - len(failures)}/{len(todo)} states")
-    if failures:
-        # Loud, and non-zero: a silent partial scrape republishes stale data
-        # from a previous run as if it were fresh.
-        sys.exit(f"Failed to scrape: {', '.join(failures)}")
+    print(f"Scraped {len(scraped)}/{len(todo)} states")
+    return scraped, failures
 
 
 def _grab_state(driver, state, race, nbc_cycle, states_dir):
-    """Save one state's county rows. Returns True on success."""
+    """Save one state's county rows. Returns its proper name, or None on failure."""
     slug = RACES[race]["nbc_slug"]
     label = RACES[race]["label"]
     driver.get(f"{BASE_URL}/politics/{nbc_cycle}-elections/{state}-{slug}-results")
@@ -116,7 +111,7 @@ def _grab_state(driver, state, race, nbc_cycle, states_dir):
         county_rows = driver.find_elements(By.CSS_SELECTOR, 'div[data-testid="county-row"]')
         if not county_rows:
             print(f"No county rows found for {state}")
-            return False
+            return None
 
         state_dir = states_dir / state_name
         state_dir.mkdir(parents=True, exist_ok=True)
@@ -125,11 +120,11 @@ def _grab_state(driver, state, race, nbc_cycle, states_dir):
                 outfile.write(total_expected_tag + row.get_attribute("outerHTML") + "\n\n")
 
         print(f"Data saved for {state_name} ({len(county_rows)} county rows)")
-        return True
+        return state_name
 
     except (TimeoutException, NoSuchElementException, WebDriverException, ValueError) as e:
         print(f"An error occurred for {state}: {type(e).__name__}: {e}")
-        return False
+        return None
 
 
 def _expand_full_county_table(driver, slug):
@@ -214,13 +209,25 @@ def _leading_candidate(results, party):
     return max(totals, key=totals.get)
 
 
-def process_all(states_dir, output_csv):
-    """Parse every scraped state's raw_div.txt into a single CSV of county-level results."""
+def process_all(states_dir, output_csv, only=None):
+    """Parse scraped raw_div.txt files into a single CSV of county-level results.
+
+    `only` restricts the run to the states just scraped. states/ is a cache that
+    outlives a run, so without it a --skip'd (or failed) state would be
+    republished from an earlier scrape as though it were fresh.
+    """
     if not states_dir.is_dir():
         sys.exit(f"{states_dir} does not exist - nothing to process. Run without --no-grab first.")
 
+    state_dirs = sorted(d for d in states_dir.iterdir() if d.is_dir())
+    if only is not None:
+        stale = [d.name for d in state_dirs if d.name not in only]
+        state_dirs = [d for d in state_dirs if d.name in only]
+        if stale:
+            print(f"Ignoring {len(stale)} cached state(s) not scraped this run: {', '.join(stale)}")
+
     rows = []
-    for state_dir in sorted(d for d in states_dir.iterdir() if d.is_dir()):
+    for state_dir in state_dirs:
         state_name = state_dir.name
         results = list(_iter_county_results(state_dir))
         if not results:
@@ -274,11 +281,21 @@ def main():
 
     nbc_cycle = args.nbc_cycle or RACES[args.race]["nbc_cycle"]
     paths = race_files(args.race)
+    race = RACES[args.race]
+    print(f"{race['label']} {race['election_year']} results, from NBC's {nbc_cycle} pages")
 
-    if not args.no_grab:
+    failures = []
+    if args.no_grab:
+        process_all(paths["states_dir"], paths["output_csv"])
+    else:
         skip = {s.strip() for s in args.skip.split(",") if s.strip()}
-        grab_data(args.race, nbc_cycle, skip, headless=not args.show_browser)
-    process_all(paths["states_dir"], paths["output_csv"])
+        scraped, failures = grab_data(args.race, nbc_cycle, skip, headless=not args.show_browser)
+        # Process first, so the CSV holds this run's good states, then fail
+        # loudly - a partial scrape should update what it can AND be noticed.
+        process_all(paths["states_dir"], paths["output_csv"], only=scraped)
+
+    if failures:
+        sys.exit(f"Failed to scrape: {', '.join(failures)}")
 
 
 if __name__ == "__main__":

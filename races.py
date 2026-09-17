@@ -100,7 +100,7 @@ RACES = {
     },
     "governor": {
         "label": "Governor",
-        "unit": "seat",
+        "unit": "governorship",
         "nbc_slug": "governor",
         "election_year": 2026,  # Tue 3 Nov 2026
         "nbc_cycle": "2024",    # /politics/2026-elections/governor-results is a 404 today
@@ -108,6 +108,16 @@ RACES = {
         "weights": {state: 1 for state in GOVERNOR_STATES_2026},
     },
 }
+
+
+# The CSV schema every producer writes and map.html reads. Party columns are
+# fixed regardless of who is running - NBC tags each candidate row with its
+# party, so the scraper can resolve it - with the real names carried alongside.
+CSV_HEADER = [
+    "State", "County", "State Total Expected", "Total Votes", "Percent In",
+    "Democrat Real", "Republican Real", "Democrat Predicted", "Republican Predicted",
+    "Democrat Name", "Republican Name",
+]
 
 
 def race_files(race):
