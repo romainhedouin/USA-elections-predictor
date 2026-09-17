@@ -85,12 +85,14 @@
   :root[data-theme="dark"] {
       color-scheme: dark;
       /* Polarity inverts in the dark: on a dark background the deep navy and
-         crimson recede, so "certain" is the bright, saturated one and
-         "projected" is the muted one. Same ranking, opposite direction. */
-      --dem-certain:   #6aa5e8;
-      --dem-projected: #2c4d7a;
-      --rep-certain:   #f08a86;
-      --rep-projected: #7a2f33;
+         crimson recede, so "certain" is the vivid one and "projected" is the
+         muted one - same ranking, opposite direction. Keep these near 60%
+         lightness: pushing them brighter than that drains the chroma and the
+         red starts reading as salmon rather than as a party colour. */
+      --dem-certain:   #3d8bf0;
+      --dem-projected: #26466f;
+      --rep-certain:   #f04a45;
+      --rep-projected: #822b2f;
       --no-data:       #2b323d;
       --no-race:       #1e242d;
       --no-race-line:  #2f3743;
