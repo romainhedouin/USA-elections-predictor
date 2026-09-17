@@ -629,16 +629,29 @@ const DEFAULT_RACE = (() => {
 
 // Read live so the OS light/dark theme, and any future palette edit, reaches
 // the SVG fills as well as the CSS-styled chrome.
-const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const COLORS = {
-  get demCertain()   { return cssVar("--dem-certain"); },
-  get demProjected() { return cssVar("--dem-projected"); },
-  get repCertain()   { return cssVar("--rep-certain"); },
-  get repProjected() { return cssVar("--rep-projected"); },
-  get noData()       { return cssVar("--no-data"); },
-  get noRace()       { return cssVar("--no-race"); },
-  get noRaceLine()   { return cssVar("--no-race-line"); },
-};
+//
+// snapshotColors() reads getComputedStyle once per render pass instead of once
+// per fill lookup: leaderFill/stateFill/countyFill run inside a d3 .attr(fn)
+// loop that is also writing "d" attributes to freshly-appended nodes, so a
+// getComputedStyle call on every single county (thousands, in a drill-down)
+// would force a synchronous style recalc on every iteration - classic layout
+// thrashing. The palette cannot change mid-render (nothing else runs between
+// a render call and its completion), so one snapshot per pass is exact, not
+// approximate.
+const cssVar = (style, name) => style.getPropertyValue(name).trim();
+function snapshotColors() {
+  const style = getComputedStyle(document.documentElement);
+  return {
+    demCertain:   cssVar(style, "--dem-certain"),
+    demProjected: cssVar(style, "--dem-projected"),
+    repCertain:   cssVar(style, "--rep-certain"),
+    repProjected: cssVar(style, "--rep-projected"),
+    noData:       cssVar(style, "--no-data"),
+    noRace:       cssVar(style, "--no-race"),
+    noRaceLine:   cssVar(style, "--no-race-line"),
+  };
+}
+let COLORS = snapshotColors();
 
 const normalize = name => name.trim().toLowerCase();
 
@@ -999,6 +1012,7 @@ function start(topology, president) {
       ? d3.select(active).datum().properties.name : null;
 
     nationalSvg.selectAll("*").remove();
+    COLORS = snapshotColors();
     buildDefs(nationalSvg, "nat", scaleFor(nationalSvg, 975));
 
     nationalSvg.append("g")
@@ -1274,6 +1288,7 @@ function start(topology, president) {
     document.documentElement.classList.add("overlay-open");
     overlay.classed("open", true); // open first: a hidden SVG has no width to measure
 
+    COLORS = snapshotColors();
     buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth));
     renderCounties(stateSvg, countiesInState, path, "st");
 

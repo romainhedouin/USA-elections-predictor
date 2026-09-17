@@ -390,6 +390,11 @@ STATIC_TYPES = {
 }
 SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
+# path -> (mtime_ns, bytes). Bounded by construction: only CSV/meta/static
+# paths the router already whitelists ever get read, so at most a handful of
+# entries (a few races' worth of CSV + meta, well under 1MB total).
+_FILE_CACHE = {}
+
 
 def health_payload():
     """Per-race: last success, last error, and how old the CSV on disk is."""
@@ -401,9 +406,11 @@ def health_payload():
     for race in ALL_RACES:
         path = DATA_DIR / csv_name(race)
         entry = snapshot[race]
-        present = path.exists()
-        age = round(now - path.stat().st_mtime, 1) if present else None
-        size = path.stat().st_size if present else 0
+        try:
+            st = path.stat()
+            present, age, size = True, round(now - st.st_mtime, 1), st.st_size
+        except OSError:
+            present, age, size = False, None, 0
         if present:
             servable += 1
         last_success = entry["last_success"]
@@ -448,6 +455,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "electionmap"
     sys_version = ""
     protocol_version = "HTTP/1.1"
+    _index_html = None  # lazily-built, cached copy of map.html + injected config
 
     # -- helpers ---------------------------------------------------------
     def _send(self, code, body, content_type, extra_headers=None, head_only=False):
@@ -463,15 +471,38 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def _send_file(self, path, content_type, extra_headers=None, head_only=False):
+        """Serve a file from DATA_DIR or the repo, reading it from disk only
+        when it has actually changed since the last request.
+
+        The CSVs and their .meta.json sidecars only change once per refresh
+        cycle (every REFRESH_SECONDS, default 900s), but map.html polls its
+        active race's CSV every 60s per visitor and Railway's health check
+        stats every configured CSV too - so on a quiet day the overwhelming
+        majority of requests for a given path see the same bytes. Caching on
+        mtime turns that from an open+read+close into a single stat() call.
+        """
         try:
-            body = path.read_bytes()
+            st = path.stat()
         except FileNotFoundError:
             return self._not_found(head_only)
         except OSError as exc:
-            log.error("read failed path=%s err=%s", path, exc)
+            log.error("stat failed path=%s err=%s", path, exc)
             return self._send(500, "500 internal error\n", "text/plain; charset=utf-8",
                               head_only=head_only)
-        headers = {"Last-Modified": self.date_time_string(int(path.stat().st_mtime))}
+
+        cached = _FILE_CACHE.get(path)
+        if cached is not None and cached[0] == st.st_mtime_ns:
+            body = cached[1]
+        else:
+            try:
+                body = path.read_bytes()
+            except OSError as exc:
+                log.error("read failed path=%s err=%s", path, exc)
+                return self._send(500, "500 internal error\n", "text/plain; charset=utf-8",
+                                  head_only=head_only)
+            _FILE_CACHE[path] = (st.st_mtime_ns, body)
+
+        headers = {"Last-Modified": self.date_time_string(int(st.st_mtime))}
         headers.update(extra_headers or {})
         self._send(200, body, content_type, headers, head_only)
 
@@ -480,15 +511,23 @@ class Handler(BaseHTTPRequestHandler):
 
         The page carries its own defaults, so the unsubstituted file is still a
         working page - which is what the tests and a plain static server get.
+
+        The substitution result is cached on the class (DEFAULT_RACE is fixed
+        for the life of the process and map.html is baked into the image), so
+        a request serving the single busiest route on the site does not re-read
+        a 69KB file from disk and re-run a string replace every single time.
         """
-        try:
-            html = (REPO_DIR / "map.html").read_text(encoding="utf-8")
-        except OSError as exc:
-            log.error("read failed path=map.html err=%s", exc)
-            return self._send(500, "500 internal error\n", "text/plain; charset=utf-8",
-                              head_only=head_only)
-        config = json.dumps({"defaultRace": DEFAULT_RACE})
-        html = html.replace("<!--CONFIG-->", f"<script>window.__config={config};</script>", 1)
+        html = Handler._index_html
+        if html is None:
+            try:
+                raw = (REPO_DIR / "map.html").read_text(encoding="utf-8")
+            except OSError as exc:
+                log.error("read failed path=map.html err=%s", exc)
+                return self._send(500, "500 internal error\n", "text/plain; charset=utf-8",
+                                  head_only=head_only)
+            config = json.dumps({"defaultRace": DEFAULT_RACE})
+            html = raw.replace("<!--CONFIG-->", f"<script>window.__config={config};</script>", 1)
+            Handler._index_html = html
         self._send(200, html, "text/html; charset=utf-8",
                    {"Cache-Control": "no-cache"}, head_only)
 
