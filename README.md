@@ -22,11 +22,12 @@ that are reporting at different rates.
 
 ## Requirements
 
-- Python 3.9+ and `pip install -r requirements.txt`
+- Python 3.9+ and `pip install -r requirements.txt` (just `requests`)
 - Network access for `map.html`'s three jsDelivr assets (d3, topojson-client,
   and the us-atlas county boundaries)
 
-Google Chrome is only needed for the superseded scraper in `legacy/`.
+Google Chrome and the extra packages in `legacy/requirements.txt` are only
+needed for the superseded scraper in that folder.
 
 ## Data source
 
@@ -151,3 +152,20 @@ case good luck!
 | `generate_mock_data.py` | fictional fixtures with the same schema |
 | `map.html` | the whole UI, one static file |
 | `legacy/` | the superseded Selenium scraper, kept as a fallback |
+| `server.py` + `railway.toml` | the deployment: serves the page and refreshes the data on a timer |
+| `DEPLOY.md` | click-by-click Railway setup |
+
+## Deploying
+
+`server.py` serves `map.html` plus the CSVs and refreshes them on a timer, in
+one process — Railway volumes attach to a single service, so the refresher
+lives inside the web server rather than in a cron job. Run it locally with:
+
+```
+DATA_DIR=./data REFRESH_SECONDS=900 NBC_CYCLE=2024 RACES=president python server.py
+```
+
+It seeds mock data for every race on a cold start so the site is never broken,
+then fetches live results for whichever races `RACES` names. `/healthz` reports
+per-race freshness, last success and last error. A failed refresh keeps serving
+the last good data. See `DEPLOY.md` for the Railway steps.

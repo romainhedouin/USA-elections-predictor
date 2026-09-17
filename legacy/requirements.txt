@@ -1,0 +1,6 @@
+# Only for the superseded Selenium scraper in this folder. Deliberately kept
+# out of the root requirements.txt: a deployment container has no Chrome, so
+# installing selenium there would ship a library that cannot ever run.
+#   pip install -r legacy/requirements.txt
+beautifulsoup4==4.12.3
+selenium==4.26.1
