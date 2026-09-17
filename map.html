@@ -56,13 +56,16 @@
     --mesh: #6b7480;
     --chip: #f1f2f4;
     --chip-hover: #e5e7ea;
+    /* Slightly see-through, so the panel reads as floating above the map
+       rather than as a flat white slab. */
+    --panel-bg: rgba(255, 255, 255, 0.86);
     --danger: #b01f24;
 
     /* Vertical budget reserved for everything that is not the map: the map
        is then sized to fill whatever is left, so the whole thing lands on one
        screen. Lower it for a bigger map plus a little scroll, raise it to
        guarantee none. */
-    --map-chrome: 23rem;
+    --map-chrome: 25rem;
   }
 
   /* Colour-blind mode. The light tints above sit almost entirely on the
@@ -109,6 +112,7 @@
       --chip: #232a34;
       --chip-hover: #2c3440;
       --danger: #f59a9a;
+      --panel-bg: rgba(23, 28, 36, 0.88);
   }
 
   :root[data-theme="dark"][data-palette="cvd"] {
@@ -123,7 +127,10 @@
 
   /* ---------- base ---------- */
   * { box-sizing: border-box; }
-  html { overflow-x: clip; }
+  html { overflow-x: clip; scrollbar-gutter: stable; }
+  /* While the drill-down is open it is the thing that scrolls, not the page
+     behind it. */
+  html.overlay-open, html.overlay-open body { overflow: hidden; }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -147,7 +154,7 @@
 
   .page {
     max-width: 1320px; margin: 0 auto;
-    padding: 1.5rem clamp(0.75rem, 3vw, 1.5rem) 2.5rem;
+    padding: 1.5rem clamp(0.75rem, 3vw, 1.5rem) 1rem;
     padding-left:  max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-left));
     padding-right: max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-right));
     display: flex; flex-direction: column;
@@ -190,7 +197,7 @@
     color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;
   }
   .header-controls button.chip-button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
-  #theme-toggle { padding: 0.4rem 0.7rem; }
+  #theme-toggle { padding: 0.4rem 0.7rem; min-width: 44px; justify-content: center; }
   #theme-toggle svg { width: 15px; height: 15px; display: block; }
   #palette-toggle .dot {
     width: 11px; height: 11px; border-radius: 50%; flex: none;
@@ -198,6 +205,9 @@
   }
 
   /* ---------- cards ---------- */
+  /* The last card has nothing after it, so its bottom margin is pure scroll. */
+  .page > :last-child { margin-bottom: 0; }
+
   .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
@@ -245,6 +255,16 @@
   }
 
   .state { stroke: var(--map-stroke); stroke-width: 0.6; cursor: pointer; transition: filter 0.1s ease; }
+  /* An `outline` on an SVG element is drawn around its bounding BOX, so the
+     default focus ring reads as a blue rectangle slapped over the map - and it
+     showed up after a plain mouse click, because closing the drill-down hands
+     focus back to the state you opened. Suppress it, and for keyboard users
+     trace the state's own edge instead, which is both accurate and prettier. */
+  .state:focus { outline: none; }
+  .state:focus-visible {
+    outline: none;
+    stroke: var(--ink); stroke-width: 3; vector-effect: non-scaling-stroke;
+  }
   .state:hover { filter: brightness(0.93); }
   .state.no-race { cursor: default; }
   .state.no-race:hover { filter: none; }
@@ -310,10 +330,14 @@
   /* --vb-ratio is the open state's own aspect ratio, set from JS, so the panel
      hugs the state instead of letterboxing a tall state in a wide box. */
   #overlay-panel {
-    --map-cap: min(68svh, 600px);
-    background: var(--card-bg); border-radius: 14px; padding: 1.25rem 1.5rem 1.5rem;
-    width: min(92vw, 900px, calc(var(--map-cap) * var(--vb-ratio, 1.4) + 3rem));
-    min-width: min(92vw, 340px); max-height: 90svh; overflow: auto;
+    --map-cap: clamp(190px, 32svh, 320px);
+    background: var(--panel-bg);
+    -webkit-backdrop-filter: blur(16px) saturate(1.15);
+    backdrop-filter: blur(16px) saturate(1.15);
+    border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.25rem 1.5rem 1.5rem;
+    width: min(94vw, 780px);
+    min-width: min(94vw, 320px); max-height: 90svh; overflow: auto; overscroll-behavior: contain;
     box-shadow: 0 20px 50px rgba(16, 24, 40, 0.35);
     transform: scale(0.97); opacity: 0; transition: transform 0.16s ease, opacity 0.16s ease;
   }
@@ -328,31 +352,69 @@
   }
   #overlay-close:hover { background: var(--chip-hover); color: var(--ink); }
   #overlay-note { font-size: 0.82rem; color: var(--muted); margin: 0 0 0.75rem; }
+  #overlay-dismiss-hint { display: none; }
 
-  #state-map {
-    display: block; margin-inline: auto; height: auto;
-    max-height: var(--map-cap);
-    width: min(100%, calc(var(--map-cap) * var(--vb-ratio, 1.4)));
+  /* Fixed, moderate height: the map is one panel among three now, so it should
+     neither dominate nor vanish. The SVG letterboxes itself inside this box. */
+  #state-map { display: block; margin-inline: auto; width: 100%; height: var(--map-cap); }
+
+  /* ---------- drill-down: candidate summary ---------- */
+  #overlay-summary { margin: 0.25rem 0 0.9rem; display: grid; gap: 0.7rem; }
+  .cand-row { display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.75rem; align-items: baseline; }
+  .cand-name { font-size: 0.88rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; }
+  .cand-name i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .cand-numbers { font-size: 0.85rem; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .cand-numbers .now { font-weight: 600; }
+  .cand-numbers .arrow { color: var(--muted); margin: 0 0.3rem; }
+  /* Counted votes solid, the extrapolated remainder in the lighter tint - the
+     same certain/projected pairing the map uses, so the bar reads the same way. */
+  .cand-bar { grid-column: 1 / -1; height: 9px; border-radius: 5px; background: var(--no-data); overflow: hidden; display: flex; }
+  .cand-bar .counted, .cand-bar .projected { height: 100%; }
+  .cand-sub { grid-column: 1 / -1; font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- drill-down: area table ---------- */
+  #overlay-table-wrap { margin-top: 0.9rem; max-height: 46svh; overflow: auto; border-top: 1px solid var(--border); }
+  #overlay-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+  #overlay-table th, #overlay-table td { padding: 0.38rem 0.5rem; text-align: right; white-space: nowrap; }
+  #overlay-table th:first-child, #overlay-table td:first-child { text-align: left; white-space: normal; }
+  #overlay-table thead th {
+    position: sticky; top: 0; z-index: 1; background: var(--card-bg);
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
+    border-bottom: 1px solid var(--border); font-weight: 600;
   }
+  #overlay-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+  #overlay-table td.proj { color: var(--muted); }
+  #overlay-table td.dem-now { color: var(--dem-certain); font-weight: 600; }
+  #overlay-table td.rep-now { color: var(--rep-certain); font-weight: 600; }
+  .proj-inline { display: none; }
+  #overlay-table caption { caption-side: top; text-align: left; font-size: 0.74rem; color: var(--muted); padding: 0 0 0.45rem; }
 
   /* ---------- tablet / large phone ---------- */
   @media (max-width: 860px) {
-    /* The tabs drop below the title here, so the map has less height to work with. */
-    :root { --map-chrome: 27rem; }
+    /* The tabs drop below the title here, so the map has less height to work
+       with - measured, not guessed: see tests/test_layout.py. */
+    :root { --map-chrome: 33rem; }
     header { display: block; margin-bottom: 1rem; }
     header .titles { margin-bottom: 0.85rem; }
-    .header-controls { display: block; }
-    .tabs { display: grid; grid-template-columns: repeat(3, 1fr); }
+    /* Tabs get their own row; the two toggles share the next one. Stacking all
+       three pushed the map 38px below the fold on a tablet. */
+    .header-controls { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .tabs { display: grid; grid-template-columns: repeat(3, 1fr); flex: 1 1 100%; }
     .tabs button { padding: 0.4rem 0.3rem; }
-    .header-controls { display: flex; gap: 0.4rem; }
-    .tabs { flex: 1 1 100%; }
-    #palette-toggle { flex: 1 1 auto; justify-content: center; margin-top: 0.4rem; }
-    #theme-toggle { margin-top: 0.4rem; }
+    #palette-toggle { flex: 1 1 auto; justify-content: center; }
   }
 
   /* ---------- phone ---------- */
   @media (max-width: 640px) {
-    .page { padding-bottom: 2rem; }
+    /* Squeeze the chrome, not the map: on a 360px phone the header, legend and
+       scoreboard together were pushing the page 64px past the fold. */
+    .page { padding-top: 1rem; padding-bottom: 0.75rem; }
+    header { margin-bottom: 0.75rem; }
+    header .titles { margin-bottom: 0.6rem; }
+    header p.subtitle { font-size: 0.8rem; line-height: 1.35; }
+    .card { padding: 0.8rem clamp(0.9rem, 3vw, 1.5rem); }
+    .score-card { margin-top: 0.85rem; }
+    .scoreboard { gap: 0.5rem 1rem; }
 
     /* The map is the product: put it directly under the header and push the
        scoreboard below it, rather than burying it under 700px of chrome. */
@@ -371,28 +433,51 @@
 
     #legend {
       display: grid; grid-template-columns: 1fr 1fr;
-      gap: 0.35rem 0.75rem; font-size: 0.75rem;
-      margin-top: 0.75rem; padding-top: 0.75rem;
+      gap: 0.28rem 0.6rem; font-size: 0.72rem;
+      margin-top: 0.6rem; padding-top: 0.6rem;
     }
+    #legend i { width: 13px; height: 13px; }
     #legend .legend-wide { grid-column: 1 / -1; }
     .scoreboard .side-breakdown { font-size: 0.72rem; }
   }
 
   /* ---------- drill-down as a full-screen sheet on phones and short viewports ---------- */
   @media (max-width: 640px), (max-height: 520px) {
-    #overlay { align-items: stretch; justify-content: stretch; }
+    #overlay { align-items: flex-end; justify-content: center; }
     #overlay-panel {
-      max-width: none; max-height: none; width: 100%; height: 100dvh; min-width: 0;
-      border-radius: 0; transform: none;
-      padding: calc(1rem + env(safe-area-inset-top)) clamp(0.75rem, 3vw, 1rem)
-               calc(1rem + env(safe-area-inset-bottom));
+      max-width: none; width: 100%; min-width: 0;
+      height: min(90dvh, 100dvh - 3.5rem); max-height: none;
+      border-radius: 18px 18px 0 0; border-bottom: none; transform: none;
+      padding: 0.85rem clamp(0.75rem, 3vw, 1rem) calc(0.85rem + env(safe-area-inset-bottom));
       display: flex; flex-direction: column;
     }
     #overlay.open #overlay-panel { transform: none; }
     #overlay-close { width: 44px; height: 44px; font-size: 1.4rem; }
-    #state-map {
-      flex: 1 1 auto; min-height: 0;
-      width: 100%; height: 100%; max-width: none; max-height: none;
+    /* Grab-handle: the usual signal that a sheet can be dismissed. */
+    #overlay-panel::before {
+      content: ""; flex: none; width: 36px; height: 4px; border-radius: 2px;
+      background: var(--border); margin: 0 auto 0.6rem;
+    }
+    #overlay-dismiss-hint {
+      display: block; flex: none; margin: -0.2rem 0 0.5rem; text-align: center;
+      font-size: 0.72rem; color: var(--muted);
+    }
+    /* The sheet holds three stacked sections now, so the map must not flex to
+       fill it - that starved the table down to a couple of visible rows. One
+       scroll context for the whole sheet, not a scroller inside a scroller. */
+    #overlay-panel { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    #state-map { flex: none; width: 100%; height: clamp(170px, 26svh, 250px); }
+    #overlay-table-wrap { max-height: none; overflow: visible; }
+    #overlay-table thead th { top: -1px; }
+    /* Six columns do not fit 360px, and letting the table scroll sideways
+       would drag the whole sheet with it. Fold each projection under the
+       count it belongs to instead. */
+    #overlay-table th:nth-child(4), #overlay-table td:nth-child(4),
+    #overlay-table th:nth-child(6), #overlay-table td:nth-child(6) { display: none; }
+    #overlay-table th, #overlay-table td { padding: 0.34rem 0.3rem; }
+    .proj-inline {
+      display: block; font-weight: 400; color: var(--muted);
+      font-size: 0.72rem; line-height: 1.25;
     }
   }
 
@@ -455,12 +540,15 @@
 
 <div id="overlay">
   <div id="overlay-panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title" tabindex="-1">
+    <p id="overlay-dismiss-hint" aria-hidden="true">Tap outside to close</p>
     <div id="overlay-header">
       <h2 id="overlay-title"></h2>
       <button id="overlay-close" type="button" aria-label="Close">&times;</button>
     </div>
     <p id="overlay-note"></p>
+    <div id="overlay-summary"></div>
     <svg id="state-map" role="img"></svg>
+    <div id="overlay-table-wrap"><table id="overlay-table"></table></div>
   </div>
 </div>
 
@@ -532,6 +620,9 @@ const COLORS = {
 };
 
 const normalize = name => name.trim().toLowerCase();
+
+// Hooks for the test suite in tests/. Nothing in the page reads these.
+window.__mapTest = {};
 const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
 // Tri-state on purpose: an exact tie is not a Republican lead, and calling it
@@ -562,6 +653,24 @@ function describeAge(iso) {
   return `updated ${Math.round(hours / 24)} days ago`;
 }
 
+// Where to put a floating box of size w x h next to a pointer at (cx, cy),
+// so that it never leaves the viewport. Prefer below-right of the pointer;
+// flip to the other side when that would overflow; then clamp, because on a
+// narrow screen a wide tooltip overflows whichever side it is on - flipping
+// alone just moves the problem to the opposite edge.
+// Pure, and exported on window.__mapTest, so it can be tested directly.
+function clampToViewport(cx, cy, w, h, vw, vh, gap = 12, pad = 8) {
+  let x = cx + gap;
+  if (x + w > vw - pad) x = cx - gap - w;
+  x = Math.min(Math.max(pad, x), Math.max(pad, vw - w - pad));
+
+  let y = cy + gap;
+  if (y + h > vh - pad) y = cy - gap - h;
+  y = Math.min(Math.max(pad, y), Math.max(pad, vh - h - pad));
+
+  return { x, y };
+}
+
 function parseRaceCsv(text) {
   const rows = d3.dsvFormat(";").parse(text);
   if (!rows.columns || !rows.columns.includes("Percent In")) {
@@ -570,9 +679,15 @@ function parseRaceCsv(text) {
   return rows;
 }
 
+window.__mapTest.clampToViewport = clampToViewport;
+
 function buildRaceData(rows) {
   const dataByKey = new Map();
   const stateAggregates = new Map();
+  // Every reporting area of a state, in order, whether or not it can be drawn.
+  // The eight states reported by township/ward/district have no county shapes,
+  // but they do have numbers, and the drill-down table can show them.
+  const areasByState = new Map();
 
   for (const row of rows) {
     const percentIn = parseFloat(row["Percent In"]);
@@ -596,7 +711,10 @@ function buildRaceData(rows) {
     // Brooklyn/Baltimore City/Fairfax City silently dropped or doubled.
     // Rows with no FIPS are states reported below county level; they still
     // count towards the state aggregate, they just have nothing to draw.
+    area.name = row["Area"];
     if (row["FIPS"]) dataByKey.set(row["FIPS"], area);
+    if (!areasByState.has(stateKey)) areasByState.set(stateKey, []);
+    areasByState.get(stateKey).push(area);
 
     // A single county's raw leader and predicted leader can never actually
     // differ - Predicted is just Real scaled by a constant (100/PercentIn),
@@ -619,7 +737,7 @@ function buildRaceData(rows) {
     stateAggregates.set(stateKey, agg);
   }
 
-  return { dataByKey, stateAggregates };
+  return { dataByKey, stateAggregates, areasByState };
 }
 
 function stateStatusFor(current, stateKey) {
@@ -629,6 +747,7 @@ function stateStatusFor(current, stateKey) {
   const predictedLeader = leaderOf(agg.demPredicted, agg.repPredicted);
   const percentIn = agg.totalExpected > 0 ? (agg.totalVotes / agg.totalExpected) * 100 : 0;
   return {
+    agg,
     predictedLeader,
     geography: agg.geography,
     // Eight states report by township, municipality, ward or legislative
@@ -779,14 +898,18 @@ function start(topology, president) {
   let touchTooltipTimer;
   function showTooltip(event, html) {
     clearTimeout(touchTooltipTimer);
-    // Park it at the left edge before measuring: at its previous `left` the
+    // Park it at the origin before measuring: at its previous position the
     // shrink-to-fit width is clamped by the remaining space, not the content.
-    const node = tooltip.style("display", "block").style("left", "0px").html(html).node();
-    const width = node.offsetWidth;
-    const flip = event.pageX + 12 + width > window.innerWidth - 8;
+    const node = tooltip.style("display", "block").style("left", "0px").style("top", "0px").html(html).node();
+    const place = clampToViewport(
+      event.clientX, event.clientY, node.offsetWidth, node.offsetHeight,
+      document.documentElement.clientWidth, document.documentElement.clientHeight
+    );
+    // clientX/Y are viewport-relative; the tooltip is positioned against the
+    // document, so add the scroll offset back.
     tooltip
-      .style("left", (flip ? event.pageX - 12 - width : event.pageX + 12) + "px")
-      .style("top", (event.pageY + 12) + "px");
+      .style("left", (place.x + window.scrollX) + "px")
+      .style("top", (place.y + window.scrollY) + "px");
     // A tap synthesises a mousemove, so touch users get a tooltip with no
     // pointerleave to ever dismiss it. Time it out instead of stranding it.
     if (!window.matchMedia("(hover: hover)").matches) {
@@ -1014,6 +1137,83 @@ function start(topology, president) {
   let openStateFeature = null;   // so a resize / theme flip can redraw the drill-down
   let errorTimer;
 
+  const numberFmt = n => Math.round(n).toLocaleString();
+  const pct = (part, whole) => (whole > 0 ? (part / whole) * 100 : 0);
+
+  // Two numbers for every candidate: what is actually counted, and where that
+  // is heading once every area is extrapolated to full reporting. Counted is
+  // drawn in the "certain" colour and the projection in the "projected" one,
+  // matching the map so the two readings line up.
+  function renderOverlaySummary(status, names) {
+    const box = d3.select("#overlay-summary");
+    if (!status) { box.html(""); return; }
+    const agg = status.agg;
+    const sides = [
+      { label: names.dem, now: agg.demReal, proj: agg.demPredicted,
+        solid: "var(--dem-certain)", tint: "var(--dem-projected)" },
+      { label: names.rep, now: agg.repReal, proj: agg.repPredicted,
+        solid: "var(--rep-certain)", tint: "var(--rep-projected)" },
+    ];
+    const nowTotal = agg.demReal + agg.repReal;
+    const projTotal = agg.demPredicted + agg.repPredicted;
+    // Scale against the projected total, not the larger of the two: scaling to
+    // the max always pins the leader's bar to full width, which reads as "100%".
+    // Against the total, the two bars fill the row between them and their
+    // lengths match the percentages printed underneath.
+    const scale = Math.max(projTotal, 1);
+
+    box.html(sides.map(side => {
+      const barWidth = pct(side.proj, scale);
+      const countedShare = pct(side.now, side.proj || 1);
+      return `
+      <div class="cand-row">
+        <div class="cand-name"><i style="background:${side.solid}"></i>${side.label}</div>
+        <div class="cand-numbers">
+          <span class="now" style="color:${side.solid}">${numberFmt(side.now)}</span>
+          <span class="arrow">&rarr;</span>
+          <span style="color:${side.tint}">${numberFmt(side.proj)}</span>
+        </div>
+        <div class="cand-bar" role="img"
+             aria-label="${side.label}: ${numberFmt(side.now)} counted, ${numberFmt(side.proj)} projected">
+          <div class="counted" style="width:${barWidth * countedShare / 100}%;background:${side.solid}"></div>
+          <div class="projected" style="width:${barWidth * (100 - countedShare) / 100}%;background:${side.tint}"></div>
+        </div>
+        <div class="cand-sub">${pct(side.now, nowTotal).toFixed(1)}% of votes counted &middot;
+          ${pct(side.proj, projTotal).toFixed(1)}% projected</div>
+      </div>`;
+    }).join(""));
+  }
+
+  function renderOverlayTable(stateKey, status, names) {
+    const areas = (current.areasByState.get(stateKey) || [])
+      .slice().sort((a, b) => a.name.localeCompare(b.name));
+    const wrap = d3.select("#overlay-table-wrap");
+    if (!areas.length) { wrap.style("display", "none"); return; }
+    wrap.style("display", null);
+
+    const unit = status && !status.countyLevel
+      ? status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
+      : "counties";
+    const rows = areas.map(area => `
+      <tr>
+        <td>${area.name}</td>
+        <td>${(+area.percentIn.toFixed(1))}%</td>
+        <td class="dem-now">${numberFmt(area.demReal)}<span class="proj-inline">${numberFmt(area.demPredicted)}</span></td>
+        <td class="proj">${numberFmt(area.demPredicted)}</td>
+        <td class="rep-now">${numberFmt(area.repReal)}<span class="proj-inline">${numberFmt(area.repPredicted)}</span></td>
+        <td class="proj">${numberFmt(area.repPredicted)}</td>
+      </tr>`).join("");
+
+    d3.select("#overlay-table").html(`
+      <caption>${areas.length} reporting ${unit} &middot; counted, then projected to full reporting</caption>
+      <thead><tr>
+        <th scope="col">Area</th><th scope="col">In</th>
+        <th scope="col">${names.dem}</th><th scope="col">Proj.</th>
+        <th scope="col">${names.rep}</th><th scope="col">Proj.</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>`);
+  }
+
   function openStateOverlay(stateFeature) {
     const stateName = stateFeature.properties.name;
     const fips = fipsByStateName.get(normalize(stateName));
@@ -1028,11 +1228,16 @@ function start(topology, president) {
     const vbWidth = x1 - x0 + pad * 2;
     const vbHeight = y1 - y0 + pad * 2;
     stateSvg.attr("viewBox", `${x0 - pad} ${y0 - pad} ${vbWidth} ${vbHeight}`);
-    // Drives the panel's width, so it hugs a tall state like California
-    // instead of letterboxing it in a wide box.
-    d3.select("#overlay-panel").style("--vb-ratio", vbWidth / vbHeight);
 
-    const status = stateStatus(normalize(stateName));
+    const stateKey = normalize(stateName);
+    const anyArea = (current.areasByState.get(stateKey) || [])[0];
+    const names = {
+      dem: anyArea ? anyArea.demName : "Democrat",
+      rep: anyArea ? anyArea.repName : "Republican",
+    };
+    const status = stateStatus(stateKey);
+    renderOverlaySummary(status, names);
+    renderOverlayTable(stateKey, status, names);
     const note = status && !status.countyLevel
       ? `${stateSummary(stateName, status)} — this state reports by `
         + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()} rather than by county, so there is no county breakdown.`
@@ -1045,6 +1250,7 @@ function start(topology, president) {
     openStateFeature = stateFeature;
     hideTooltip(); // a tap synthesises a hover, which would strand a tooltip over the sheet
     setBackgroundInert(true);
+    document.documentElement.classList.add("overlay-open");
     overlay.classed("open", true); // open first: a hidden SVG has no width to measure
 
     buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth));
@@ -1066,6 +1272,7 @@ function start(topology, president) {
   function closeOverlay({ restoreFocus = true } = {}) {
     if (!overlay.classed("open")) return;
     overlay.classed("open", false);
+    document.documentElement.classList.remove("overlay-open");
     openStateFeature = null;
     hideTooltip();
     setBackgroundInert(false);

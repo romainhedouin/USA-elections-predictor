@@ -1,0 +1,4 @@
+# Test-only dependencies. Deliberately not in the root requirements.txt, which
+# is what the deployment installs.
+pytest==8.3.3
+selenium==4.26.1
