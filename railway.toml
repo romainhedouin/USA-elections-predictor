@@ -1,0 +1,48 @@
+# Railway config-as-code for the election map service.
+# Schema: https://railway.com/railway.schema.json
+# Reference: https://docs.railway.com/config-as-code/reference
+#
+# Config defined here ALWAYS overrides the dashboard. Note the documented
+# gotcha: the dashboard UI keeps displaying its own stored values and is not
+# rewritten to match this file, so if the two ever disagree, believe this file.
+"$schema" = "https://railway.com/railway.schema.json"
+
+[build]
+# RAILPACK is the current default builder (NIXPACKS is in maintenance mode).
+# Railpack detects Python from requirements.txt (and from server.py being in
+# the repo root), then pip-installs requirements.txt. No buildCommand needed.
+#
+# Nothing may be written to the volume here: volumes are mounted at container
+# START, not during build. Seeding the data directory is server.py's job.
+builder = "RAILPACK"
+
+[deploy]
+startCommand = "python server.py"
+
+# Railway waits for a 2xx here before switching traffic to a new deploy.
+# /healthz returns 200 as soon as every configured race has a CSV on the
+# volume - including stale ones - and 503 only when there is genuinely nothing
+# to serve. So a deploy that cannot even seed mock data fails and the previous
+# deploy keeps running, which is the outcome you want.
+healthcheckPath = "/healthz"
+# Docs default is 300s; the server binds after a sub-second mock seed, so 120
+# is generous and fails faster when something is actually wrong.
+healthcheckTimeout = 120
+
+# Restart if the process dies, but stop eventually instead of crash-looping
+# forever and burning credit.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Explicit: one instance. Railway documents "Replicas cannot be used with
+# volumes", and a second replica would also mean a second scheduler thread
+# racing to rewrite the same CSVs.
+numReplicas = 1
+
+# Serverless/app-sleeping OFF, on purpose. A slept service can return 502 on
+# the first request, and the in-process scheduler's outbound traffic would
+# keep it awake anyway - so sleeping buys nothing and costs reliability.
+# NOTE: this key is present in railway.schema.json but I could not find it
+# documented in prose. If a deploy ever rejects it, delete this line and
+# confirm the toggle is off under Settings > Deploy instead.
+sleepApplication = false

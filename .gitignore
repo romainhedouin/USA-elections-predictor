@@ -1,5 +1,6 @@
 states/
 *.csv
 *.meta.json
+data/
 __pycache__/
 *.pyc
