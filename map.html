@@ -115,12 +115,23 @@
       --panel-bg: rgba(23, 28, 36, 0.88);
   }
 
+  /* These are tighter than they look. In colour-blind mode "projected" is not a
+     flat fill - buildDefs hatches it with stripes of the CERTAIN colour - so a
+     projected region renders about a quarter of the way toward its own certain
+     colour, and the pair has to stay separable AFTER that blend. The previous
+     values here were judged as flat tokens and failed: 13 CIEDE2000 between
+     rep-projected and no-data under protanopia, against a >=20 target, and 15
+     even in normal vision. Verified against Brettel/Vienot/Machado.
+     Note the amber trick from the light palette inverts here: under protanopia
+     red loses luminance while amber keeps it, so a bright red and a light amber
+     converge in dark mode. Hence the near-black rep-projected, which only reads
+     as a colour once hatched. */
   :root[data-theme="dark"][data-palette="cvd"] {
-    --dem-certain:   #4d87c5;
-    --dem-projected: #2e4f80;
-    --rep-certain:   #ffb7b6;
-    --rep-projected: #7d343a;
-    --no-data:       #2b323d;
+    --dem-certain:   #51a7fc;
+    --dem-projected: #0d42a6;
+    --rep-certain:   #f46157;
+    --rep-projected: #430f03;
+    --no-data:       #1c1c30;
     --mismatch:      #f2f5f9;
     --mismatch-casing: #0f1319;
   }
