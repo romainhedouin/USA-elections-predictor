@@ -99,14 +99,27 @@ The House is 435 single-seat districts rather than a subset of 50 states, and
 NBC already reports it that way: one national payload
 (`nbc_api.house_results()`) hands back every district's results in a single
 request, so there's no per-state fetch loop the way there is for the other
-three races. Each row in `raw_data_house.csv` is a whole district, not a
-county - so unlike the other races, **the map's per-district "mismatch"
-outline can never trigger in this pass**: that outline only shows up once you
-aggregate sub-units reporting at different rates, and a district row has no
-county breakdown under it yet. A per-district county drill-down (matching the
-state → county one the other three races have) is future work; it would need
-NBC's per-district page for all 435 seats, roughly 14× the requests this pass
-makes.
+three races - that's the whole national map, refreshed on the regular
+schedule. Each row in `raw_data_house.csv` is a whole district, not a county,
+so the map's per-district "mismatch" outline can never trigger from the
+scheduled data alone - that only shows up once you aggregate sub-units
+reporting at different rates, and a district's *national* row has no county
+breakdown under it.
+
+**The drill-down gets that breakdown a different way: on click, not on a
+timer.** Clicking a district hits `server.py`'s `GET /house-district/<geoid>`
+route, which calls `nbc_api.district_results()` for that one district only
+(NBC's per-district page, county-level, same shape as the other races' own
+drill-down) and returns it as JSON - map.html renders it into the same
+overlay UI the other races use, mismatch outline included, once the county
+data is actually in hand. Fetching NBC's per-district page for all 435 seats
+on every refresh would be roughly 14× the requests the scheduled national
+fetch makes; fetching it lazily, only for whichever district someone actually
+opens, keeps the scheduled cost at one request while still getting the real
+drill-down. A 60-second in-memory cache (`DISTRICT_CACHE_SECONDS`) absorbs a
+burst of visitors opening the same district at once. This can't be a plain
+client-side `fetch` straight to NBC - checked live, NBC sends no CORS
+headers, so a browser blocks it - hence the proxy.
 
 `us-atlas` (the CDN package the county/state map uses) has no congressional-
 district layer, and none exists anywhere on npm or jsDelivr, so
@@ -119,7 +132,8 @@ the 2026 midterms). `house_districts.json`, a GEOID → state/label table built
 by the same script, is `races.py`'s source for `HOUSE_DISTRICTS` - and also
 fixes a real NBC quirk: NBC numbers an at-large state's lone district "01"
 where the Census GEOID standard (and this map) uses "00" - see
-`nbc_api._fix_at_large_geoid`.
+`nbc_api._fix_at_large_geoid` (and its mirror image for URLs,
+`nbc_api.district_results`'s own district-number lookup).
 
 ## Trying it without scraping
 
@@ -131,7 +145,13 @@ where the projected winner matches the raw leader — both nearly-counted
 states where they disagree. Every other in-play state gets a "no data yet"
 placeholder. House mock data covers the same "certain"/"projected" match cases
 per district, real GEOIDs and all, but has no mismatch case - see "House is
-different" above for why one row can't produce one.
+different" above for why one national-map row can't produce one on its own.
+
+One asymmetry worth knowing: the House drill-down always calls the real
+`/house-district/<geoid>` proxy, live, regardless of whether the national map
+is showing mock data or real results - there's no mock version of that route.
+Click a district on the House "Demo" tab and you'll see today's actual NBC
+numbers for it, not fiction.
 
 The CSVs are gitignored, so run it once per race before opening the map:
 
@@ -160,15 +180,16 @@ python3 -m http.server
 then visit `http://localhost:8000/map.html` (opening the file directly won't
 work — `fetch` needs HTTP).
 
-It opens on a national, state-level map with President / Senate / Governor /
-House tabs; click or tab-and-Enter a state to drill into its counties (House
-has no drill-down yet - see "House is different"). It re-pulls the active
-race once a minute, and the subtitle says what is on screen and how old it
-is. Solid fill means that region's own count is effectively done, a hatch
-means it's still counting, grey means no data yet, and a dashed outline marks
-a state (or, for the other three races, a district) where the raw leader
-disagrees with the extrapolated winner. The scoreboard totals electoral
-votes or seats, split certain vs projected.
+It opens on a national map with President / Senate / Governor / House tabs;
+click or tab-and-Enter a state (or, on the House tab, a district) to drill
+into its counties - see "House is different" for how that drill-down gets its
+data differently from the other three. It re-pulls the active race's national
+map once a minute, and the subtitle says what is on screen and how old it is.
+Solid fill means that region's own count is effectively done, a hatch means
+it's still counting, grey means no data yet, and a dashed outline marks a
+state or district where the raw leader disagrees with the extrapolated
+winner. The scoreboard totals electoral votes or seats, split certain vs
+projected.
 
 `RACE_META` in `map.html` mirrors `races.py`'s weight tables by hand, since
 the page is deliberately a single static file with no build step - except

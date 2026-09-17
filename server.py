@@ -3,7 +3,10 @@
 
 Serves map.html (from the repo directory, baked into the image) and the
 raw_data*.csv files (from DATA_DIR, which on Railway is a mounted volume),
-and refreshes those CSVs on a timer from a background thread.
+and refreshes those CSVs on a timer from a background thread. Also proxies
+GET /house-district/<geoid> - a single House district's own county breakdown,
+fetched from NBC live, on demand, when someone opens that district's
+drill-down - see _house_district_payload for why that's not on the timer too.
 
 WHY ONE SERVICE AND NOT A CRON JOB
     A Railway volume can only be attached to a single service, and Railway's
@@ -11,7 +14,7 @@ WHY ONE SERVICE AND NOT A CRON JOB
     So the refresher lives inside the web process, next to the volume.
 
 WHY THE STDLIB AND NOT FLASK
-    This app has four routes, three of which are "send a file from disk".
+    This app has a handful of routes, most of which are "send a file from disk".
     Flask alone would still want gunicorn in front of it for production, and
     gunicorn's default multi-worker model would fork N copies of this process
     - which means N copies of the scheduler thread, all racing to write the
@@ -41,6 +44,12 @@ ENVIRONMENT
                      serving whatever is already on the volume; nothing is
                      pulled from upstream. Useful out of season, and the switch
                      you want if you need to stop traffic in a hurry.
+    DISTRICT_CACHE_SECONDS  int, default 60. How long a House district's
+                     on-demand county breakdown (GET /house-district/<geoid>)
+                     is cached in memory before the next click re-fetches it
+                     from NBC. Unrelated to REFRESH_SECONDS: this is fetched
+                     per click, not on the scheduler, which is the whole point
+                     - see /house-district/<geoid> below.
 """
 
 import json
@@ -56,6 +65,12 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import nbc_api
+# Aliased: this module already uses RACES for its own "which races are
+# actively refreshed" tuple (see ALL_RACES/_parse_races below) - importing
+# races.py's config dict under the same name would silently shadow it.
+from races import RACES as RACE_CONFIG
+
 # --------------------------------------------------------------------------
 # Configuration
 # --------------------------------------------------------------------------
@@ -68,6 +83,11 @@ REPO_DIR = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", "8000"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", REPO_DIR / "data")).resolve()
 REFRESH_SECONDS = max(30, int(os.environ.get("REFRESH_SECONDS", "900")))
+# House's per-district county breakdown (unlike the scheduled CSVs) is fetched
+# from NBC on demand, one request per click on the House tab's drill-down -
+# see _house_district_payload. This just guards against a burst of visitors
+# opening the same close district at once.
+DISTRICT_CACHE_SECONDS = max(15, int(os.environ.get("DISTRICT_CACHE_SECONDS", "60")))
 FETCH_TIMEOUT = max(30, int(os.environ.get("FETCH_TIMEOUT", "300")))
 # NBC_CYCLE kept as an alias so an already-deployed service keeps working.
 DATA_YEAR = (os.environ.get("DATA_YEAR") or os.environ.get("NBC_CYCLE") or "").strip()
@@ -395,6 +415,77 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 # entries (a few races' worth of CSV + meta, well under 1MB total).
 _FILE_CACHE = {}
 
+DISTRICT_ROUTE = re.compile(r"^/house-district/([0-9]{4})$")
+# geoid -> (fetched_at monotonic, status, body bytes). Bounded by
+# construction: there are only 435 possible districts, so this can never grow
+# past that even under a full-scale election-night audience.
+_district_cache = {}
+_district_cache_lock = threading.Lock()
+
+
+def _house_district_payload(geoid):
+    """A district's own county-level (or equivalent) breakdown, as JSON.
+
+    Fetched from NBC live, in the request thread, on every cache miss - unlike
+    the scheduled races, this is deliberately NOT part of refresh_race()/
+    scheduler_loop(). The whole point of drilling down client-side is to keep
+    NBC's per-district page (there are 435 of them) out of the timer entirely
+    and only ever fetch the one district a visitor actually clicks.
+
+    Returns (status_code, body_bytes).
+    """
+    now = time.monotonic()
+    with _district_cache_lock:
+        cached = _district_cache.get(geoid)
+        if cached and now - cached[0] < DISTRICT_CACHE_SECONDS:
+            return cached[1], cached[2]
+
+    cycle = DATA_YEAR or RACE_CONFIG["house"]["nbc_cycle"]
+    try:
+        result = nbc_api.district_results(geoid, cycle)
+    except Exception as exc:  # noqa: BLE001 - one bad district must not 500 the process
+        log.warning("house-district geoid=%s status=error err=%s", geoid, exc)
+        status, body = 502, json.dumps({"error": "upstream fetch failed"}).encode("utf-8")
+    else:
+        if result is None:
+            status, body = 404, json.dumps({"error": "no such district or no NBC page for it yet"}).encode("utf-8")
+        else:
+            # "no data yet" rows are dropped, matching buildRaceData() in
+            # map.html for the other three races - a county with nothing
+            # counted has no share to extrapolate and isn't shown in their
+            # drill-down table either.
+            areas = [
+                {
+                    "name": area["name"],
+                    "fips": area["fips"],
+                    "percentIn": area["percent_in"],
+                    "votes": area["votes"],
+                    "demReal": area["by_party"].get("dem", 0),
+                    "repReal": area["by_party"].get("gop", 0),
+                    "demPredicted": round(area["by_party"].get("dem", 0) * 100 / area["percent_in"]),
+                    "repPredicted": round(area["by_party"].get("gop", 0) * 100 / area["percent_in"]),
+                }
+                for area in result["areas"] if area["percent_in"] > 0
+            ]
+            payload = {
+                "geoid": result["geoid"],
+                "label": result["label"],
+                "state": result["state"],
+                "geography": result["geography"],
+                "countyLevel": result["county_level"],
+                "totalExpected": result["total_expected"],
+                "percentIn": result["percent_in"],
+                "demName": result["candidates"].get("dem", "Democrat"),
+                "repName": result["candidates"].get("gop", "Republican"),
+                "lastModified": result["last_modified"],
+                "areas": areas,
+            }
+            status, body = 200, json.dumps(payload).encode("utf-8")
+
+    with _district_cache_lock:
+        _district_cache[geoid] = (now, status, body)
+    return status, body
+
 
 def health_payload():
     """Per-race: last success, last error, and how old the CSV on disk is."""
@@ -546,6 +637,12 @@ class Handler(BaseHTTPRequestHandler):
             code, payload = health_payload()
             return self._send(code, json.dumps(payload, indent=2) + "\n",
                               "application/json; charset=utf-8",
+                              {"Cache-Control": "no-store"}, head_only)
+
+        district_match = DISTRICT_ROUTE.match(path)
+        if district_match:
+            code, body = _house_district_payload(district_match.group(1))
+            return self._send(code, body, "application/json; charset=utf-8",
                               {"Cache-Control": "no-store"}, head_only)
 
         # Anything else must be a plain filename - no slashes, no "..", so

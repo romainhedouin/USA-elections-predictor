@@ -632,6 +632,11 @@ const RACE_META = {
     // other three races' hand-typed weights, this one is filled in from the
     // district topology once it loads (see start()) rather than duplicated
     // here - 435 GEOIDs is too much to hand-maintain twice.
+    //
+    // A district's own drill-down (openDistrictOverlay) fetches its county
+    // breakdown from server.py's /house-district/<geoid> proxy on click,
+    // NOT on the regular refresh cycle - that's the whole reason House scales
+    // to a 15-minute refresh at all (see fetch_results.py's docstring).
     geography: "districts",
     weights: {},
   },
@@ -1061,10 +1066,8 @@ function start(topology, districtTopology, defaultRaceData) {
   function renderNational() {
     const districtRace = isDistrictRace(current.race);
     const features = nationalFeatures();
-    // House has no drill-down in this pass (see labelOf/weightKeyOf comment
-    // above): each district IS the map unit, with no per-district county
-    // breakdown fetched yet, so there is nothing to open a panel onto.
-    const clickable = d => !districtRace && hasRace(weightKeyOf(d));
+    const clickable = d => hasRace(weightKeyOf(d));
+    const openOverlay = d => (districtRace ? openDistrictOverlay(d) : openStateOverlay(d));
 
     // selectAll("*").remove() destroys the focused path, so remember which
     // unit it was and hand focus back after the redraw.
@@ -1090,11 +1093,11 @@ function start(topology, districtTopology, defaultRaceData) {
         showTooltip(event, `<strong>${labelOf(d)}</strong><br>${stateSummary(weightKeyOf(d), stateStatus(statusKeyOf(d)))}`);
       })
       .on("mouseleave", hideTooltip)
-      .on("click", (event, d) => { if (clickable(d)) openStateOverlay(d); })
+      .on("click", (event, d) => { if (clickable(d)) openOverlay(d); })
       .on("keydown", (event, d) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
-        if (clickable(d)) openStateOverlay(d);
+        if (clickable(d)) openOverlay(d);
       });
 
     // State borders give House viewers something to orient by even though
@@ -1172,10 +1175,8 @@ function start(topology, districtTopology, defaultRaceData) {
     nationalSvg.attr("aria-label", districtRace
       ? `Map of the United States coloured by projected winner in each of the 435 House districts, ${meta.year}`
       : `Map of the United States coloured by projected ${meta.label} winner, ${meta.year}`);
-    // House has no per-district drill-down in this pass (see renderNational),
-    // so there is nothing to invite a click into.
     d3.select("#map-hint-click").text(districtRace
-      ? "Each district is coloured by its own projected winner."
+      ? "Click a district to drill down to its counties."
       : "Click a state to drill down to its counties.");
   }
 
@@ -1240,6 +1241,12 @@ function start(topology, districtTopology, defaultRaceData) {
   // ---------- state drill-down overlay ----------
   let lastFocused = null;
   let openStateFeature = null;   // so a resize / theme flip can redraw the drill-down
+  // Same idea for a House district, plus the fetched JSON itself: a resize or
+  // theme flip must redraw from what's already loaded, not fire a second
+  // request at NBC just because the window changed size.
+  let openDistrictFeature = null;
+  let openDistrictData = null;
+  let districtFetchToken = 0; // guards a slow fetch landing after the panel moved on
   let errorTimer;
 
   const numberFmt = n => Math.round(n).toLocaleString();
@@ -1289,9 +1296,8 @@ function start(topology, districtTopology, defaultRaceData) {
     }).join(""));
   }
 
-  function renderOverlayTable(stateKey, status, names) {
-    const areas = (current.areasByState.get(stateKey) || [])
-      .slice().sort((a, b) => a.name.localeCompare(b.name));
+  function renderOverlayTable(areasIn, status, names) {
+    const areas = areasIn.slice().sort((a, b) => a.name.localeCompare(b.name));
     const wrap = d3.select("#overlay-table-wrap");
     if (!areas.length) { wrap.style("display", "none"); return; }
     wrap.style("display", null);
@@ -1342,7 +1348,7 @@ function start(topology, districtTopology, defaultRaceData) {
     };
     const status = stateStatus(stateKey);
     renderOverlaySummary(status, names);
-    renderOverlayTable(stateKey, status, names);
+    renderOverlayTable(current.areasByState.get(stateKey) || [], status, names);
     const note = status && !status.countyLevel
       ? `${stateSummary(stateName, status)} — this state reports by `
         + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()} rather than by county, so there is no county breakdown.`
@@ -1375,11 +1381,179 @@ function start(topology, districtTopology, defaultRaceData) {
     document.getElementById("overlay-panel").focus();
   }
 
+  // ---------- House district drill-down ----------
+  // Unlike openStateOverlay (which only ever reads data map.html already has
+  // in `current`), a district's own county breakdown isn't fetched by the
+  // refresh cycle at all - see RACE_META.house's comment. Opening one is
+  // async: openDistrictOverlay shows the panel immediately with a loading
+  // note, fetches server.py's /house-district/<geoid> proxy, and hands the
+  // result to renderDistrictOverlay once it lands.
+
+  function districtSummary(status) {
+    if (!status) return "No data yet";
+    if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, tied`;
+    const leaderName = status.predictedLeader === "D" ? "Democrat" : "Republican";
+    return `${status.percentIn.toFixed(0)}% in, ${status.certain ? "certain" : "projected"} ${leaderName}`
+      + (status.mismatch ? " (raw leader currently disagrees)" : "");
+  }
+
+  // A district drill-down's counties are keyed by a Map built fresh from the
+  // fetch response, not current.dataByKey (which House never populates - see
+  // buildRaceData) - so this is renderCounties' county-fill/tooltip logic
+  // with that one substitution, and "District-wide" instead of "State-wide"
+  // in the mismatch line.
+  function renderDistrictCounties(svgSelection, features, path, ns, dataByKey, status) {
+    svgSelection.append("g")
+      .selectAll("path")
+      .data(features)
+      .join("path")
+      .attr("class", "county")
+      .attr("fill", d => countyFill(dataByKey.get(d.id), ns))
+      .attr("d", path)
+      .on("mousemove", (event, d) => {
+        const data = dataByKey.get(d.id);
+        let html = `<strong>${d.properties.name}</strong><br>`;
+        if (!data) {
+          html += "No data yet";
+        } else {
+          const nameOf = leader => (leader === "D" ? data.demName : leader === "R" ? data.repName : "Nobody");
+          html += `${+data.percentIn.toFixed(1)}% in &middot; ${data.percentIn >= CERTAIN_THRESHOLD ? "done counting" : "still counting"}<br>`
+            + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R (${nameOf(leaderOf(data.demReal, data.repReal))} leads)<br>`
+            + `Predicted: ${data.demPredicted.toLocaleString()} D / ${data.repPredicted.toLocaleString()} R (${nameOf(leaderOf(data.demPredicted, data.repPredicted))} projected)`;
+          if (status && status.mismatch) html += "<br><strong>District-wide: raw leader &ne; projected winner</strong>";
+        }
+        showTooltip(event, html);
+      })
+      .on("mouseleave", hideTooltip);
+  }
+
+  // The heavy lifting, called once the proxy response is in hand - both the
+  // first time (from openDistrictOverlay's fetch) and on a resize/theme flip
+  // (from redrawAll, reusing the already-fetched openDistrictData rather than
+  // fetching again).
+  function renderDistrictOverlay(feature, payload) {
+    const label = payload.label || labelOf(feature);
+    const names = { dem: payload.demName || "Democrat", rep: payload.repName || "Republican" };
+
+    // Same shape stateStatusFor already knows how to read - one synthetic
+    // "state" aggregate, built by summing this district's own areas exactly
+    // the way buildRaceData sums a state's counties. Skipped entirely when
+    // nothing has reported yet, matching stateStatusFor's own "no aggregate
+    // for this key -> null" convention (a status object built with real
+    // zeros would print "0% in, tied" instead of "No data yet").
+    const status = payload.areas.length ? stateStatusFor({
+      stateAggregates: new Map([[feature.id, {
+        totalExpected: payload.totalExpected,
+        totalVotes: payload.areas.reduce((sum, a) => sum + a.votes, 0),
+        demReal: payload.areas.reduce((sum, a) => sum + a.demReal, 0),
+        repReal: payload.areas.reduce((sum, a) => sum + a.repReal, 0),
+        demPredicted: payload.areas.reduce((sum, a) => sum + a.demPredicted, 0),
+        repPredicted: payload.areas.reduce((sum, a) => sum + a.repPredicted, 0),
+        geography: payload.geography,
+      }]]),
+    }, feature.id) : null;
+
+    renderOverlaySummary(status, names);
+    renderOverlayTable(payload.areas, status, names);
+
+    const note = status && !status.countyLevel
+      ? `${districtSummary(status)} — this district reports by `
+        + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()} rather than by county, so there is no county map.`
+      : districtSummary(status);
+    d3.select("#overlay-title").text(label);
+    d3.select("#overlay-note").text(note);
+
+    stateSvg.selectAll("*").remove();
+
+    const countyIds = new Set(payload.areas.map(a => a.fips).filter(Boolean));
+    const countiesInDistrict = allCounties.filter(c => countyIds.has(c.id));
+    if (!countiesInDistrict.length) {
+      stateSvg.attr("aria-label", `${label}: ${note}`);
+      return;
+    }
+
+    const dataByKey = new Map(payload.areas.filter(a => a.fips).map(a => [a.fips, {
+      percentIn: a.percentIn, demReal: a.demReal, repReal: a.repReal,
+      demPredicted: a.demPredicted, repPredicted: a.repPredicted,
+      demName: names.dem, repName: names.rep,
+    }]));
+
+    const path = d3.geoPath();
+    const [[x0, y0], [x1, y1]] = path.bounds({ type: "FeatureCollection", features: countiesInDistrict });
+    const pad = Math.max(x1 - x0, y1 - y0, 1) * 0.04;
+    const vbWidth = x1 - x0 + pad * 2;
+    const vbHeight = y1 - y0 + pad * 2;
+    stateSvg.attr("viewBox", `${x0 - pad} ${y0 - pad} ${vbWidth} ${vbHeight}`);
+    stateSvg.attr("aria-label", `${label} counties: ${note}`);
+
+    COLORS = snapshotColors();
+    buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth));
+    renderDistrictCounties(stateSvg, countiesInDistrict, path, "st", dataByKey, status);
+
+    stateSvg.append("path")
+      .datum(topojson.mesh(topology, topology.objects.counties, (a, b) => a !== b && countyIds.has(a.id) && countyIds.has(b.id)))
+      .attr("class", "state-border")
+      .attr("d", path);
+
+    // The district's own boundary, not a union of the counties shown: a
+    // district can take only part of a county (NBC still lists that whole
+    // county as an area), so the true district edge is the honest outline.
+    // It lives in the district topology, but district and county topologies
+    // share one projection (see build_district_topology.sh), so the same
+    // path generator and viewBox both apply to it unchanged.
+    if (status && status.mismatch) {
+      stateSvg.append("path").datum(feature).attr("class", "mismatch-casing").attr("d", path);
+      stateSvg.append("path").datum(feature).attr("class", "mismatch-outline").attr("d", path);
+    }
+  }
+
+  function openDistrictOverlay(feature) {
+    const geoid = feature.id;
+    const token = ++districtFetchToken;
+    const label = labelOf(feature);
+
+    stateSvg.selectAll("*").remove();
+    d3.select("#overlay-summary").html("");
+    d3.select("#overlay-table-wrap").style("display", "none");
+    d3.select("#overlay-title").text(label);
+    d3.select("#overlay-note").text("Loading district results…");
+    stateSvg.attr("aria-label", `${label}: loading`);
+
+    lastFocused = document.activeElement;
+    openStateFeature = null;
+    openDistrictFeature = feature;
+    openDistrictData = null;
+    hideTooltip(); // a tap synthesises a hover, which would strand a tooltip over the sheet
+    setBackgroundInert(true);
+    document.documentElement.classList.add("overlay-open");
+    overlay.classed("open", true); // open first: a hidden SVG has no width to measure
+    document.getElementById("overlay-panel").focus();
+
+    fetch(`/house-district/${geoid}`)
+      .then(response => {
+        if (!response.ok) throw new Error(`${response.status} fetching district results`);
+        return response.json();
+      })
+      .then(payload => {
+        if (token !== districtFetchToken) return; // a newer click, or a close, already won
+        openDistrictData = payload;
+        renderDistrictOverlay(feature, payload);
+      })
+      .catch(err => {
+        if (token !== districtFetchToken) return;
+        console.error(err);
+        d3.select("#overlay-note").text(`Could not load this district's results (${err.message}).`);
+      });
+  }
+
   function closeOverlay({ restoreFocus = true } = {}) {
     if (!overlay.classed("open")) return;
     overlay.classed("open", false);
     document.documentElement.classList.remove("overlay-open");
     openStateFeature = null;
+    openDistrictFeature = null;
+    openDistrictData = null;
+    districtFetchToken++; // cancel whatever district fetch might still be in flight
     hideTooltip();
     setBackgroundInert(false);
     if (restoreFocus && lastFocused && lastFocused.isConnected) lastFocused.focus();
@@ -1426,6 +1600,10 @@ function start(topology, districtTopology, defaultRaceData) {
       closeOverlay({ restoreFocus: false });
       openStateOverlay(feature);
       lastFocused = restore;
+    } else if (openDistrictFeature && openDistrictData) {
+      // Redraw from what's already fetched - a resize or theme flip is not a
+      // reason to hit NBC's per-district page again.
+      renderDistrictOverlay(openDistrictFeature, openDistrictData);
     }
   }
 

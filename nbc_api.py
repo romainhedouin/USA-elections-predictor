@@ -118,27 +118,84 @@ def state_results(state_slug, race_slug, cycle):
     geography = payload.get("geography")
     fips_by_name = FIPS_TABLE.get(state_slug, {}) if geography in COUNTY_GEOGRAPHIES else {}
 
-    remaining = (summary.get("estimatedVotesRemaining") or {}).get("value") or 0
-    areas = []
-    for area in race.get("areas") or []:
-        areas.append({
+    return {
+        "state": payload.get("stateName") or state_slug,
+        "geography": geography,
+        "county_level": geography in COUNTY_GEOGRAPHIES,
+        "total_expected": int(summary.get("votes") or 0) + int((summary.get("estimatedVotesRemaining") or {}).get("value") or 0),
+        "percent_in": float(summary.get("percentIn") or 0),
+        "last_modified": payload.get("lastModified"),
+        "candidates": _leading_by_party(summary.get("candidates") or []),
+        "areas": _build_areas(race.get("areas") or [], fips_by_name),
+    }
+
+
+def district_results(geoid, cycle):
+    """One House district's own county-level (or equivalent) breakdown.
+
+    Fetched only on demand - see server.py's /house-district/<geoid> route -
+    never as part of the regular refresh cycle, which only needs
+    house_results()'s single national call. Returns None if NBC has no page
+    for this district (a 404, or a GEOID we don't recognise at all).
+
+    Same area shape as state_results(), for the same reason: county rows in,
+    Real/Predicted extrapolation applied the same way by the caller.
+    """
+    info = _HOUSE_DISTRICTS.get(geoid)
+    if info is None:
+        return None
+    state_slug = info["state"].lower().replace(" ", "-")
+    # NBC numbers an at-large state's lone district "1" in these URLs, not
+    # the Census GEOID's "00" - the same quirk _fix_at_large_geoid corrects
+    # the other direction for the national payload.
+    district_num = 1 if geoid[:2] in _AT_LARGE_STATE_FIPS else int(geoid[2:])
+
+    url = f"{BASE_URL}/state-results/{cycle}-elections/{state_slug}-us-house-district-{district_num}-results"
+    try:
+        payload = _get(url)
+    except requests.HTTPError as error:
+        if error.response is not None and error.response.status_code == 404:
+            return None
+        raise
+
+    races = payload.get("races") or []
+    if not races:
+        return None
+    race = races[0]
+    summary = race.get("summary") or {}
+
+    # The office's own geography here is "districts" (payload["geography"] -
+    # see state_results for the statewide equivalent of that field); what
+    # matters for joining areas to county shapes is the breakdown granularity
+    # underneath, which NBC calls underlyingGeographies on this endpoint.
+    geography = payload.get("underlyingGeographies")
+    fips_by_name = FIPS_TABLE.get(state_slug, {}) if geography in COUNTY_GEOGRAPHIES else {}
+
+    return {
+        "geoid": geoid,
+        "label": info["label"],
+        "state": info["state"],
+        "geography": geography,
+        "county_level": geography in COUNTY_GEOGRAPHIES,
+        "total_expected": int(summary.get("votes") or 0) + int((summary.get("estimatedVotesRemaining") or {}).get("value") or 0),
+        "percent_in": float(summary.get("percentIn") or 0),
+        "last_modified": payload.get("lastModified"),
+        "candidates": _leading_by_party(summary.get("candidates") or []),
+        "areas": _build_areas(race.get("areas") or [], fips_by_name),
+    }
+
+
+def _build_areas(areas_raw, fips_by_name):
+    return [
+        {
             "name": area["name"],
             "fips": fips_by_name.get(area["name"], ""),
             "percent_in": float(area.get("percentIn") or 0),
             "votes": int(area.get("votes") or 0),
             "by_party": _votes_by_party(area.get("candidates") or []),
-        })
-
-    return {
-        "state": payload.get("stateName") or state_slug,
-        "geography": geography,
-        "county_level": geography in COUNTY_GEOGRAPHIES,
-        "total_expected": int(summary.get("votes") or 0) + int(remaining),
-        "percent_in": float(summary.get("percentIn") or 0),
-        "last_modified": payload.get("lastModified"),
-        "candidates": _leading_by_party(summary.get("candidates") or []),
-        "areas": areas,
-    }
+        }
+        for area in areas_raw
+    ]
 
 
 def house_results(cycle):
