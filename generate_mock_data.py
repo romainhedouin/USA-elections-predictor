@@ -7,8 +7,9 @@ Candidate names are the generic "Democrat"/"Republican" placeholders since
 this is fictional 2028/2026 data, not a claim about real candidates or
 results.
 
---race selects president/senate/governor (races.py), which determines which
-states are actually in play. A handful of scenario states cover:
+--race selects president/senate/governor/house (races.py), which determines
+which states (or, for house, districts) are actually in play. A handful of
+scenario states cover:
   - "match" states, where the extrapolated (Predicted) winner agrees with
     whoever is currently leading on raw votes counted (a landslide state
     where reporting order doesn't matter) - both high-reporting ("certain")
@@ -17,7 +18,11 @@ states are actually in play. A handful of scenario states cover:
     one party are mostly counted while a handful of large counties for the
     other party have barely started, so the raw leader and the extrapolated
     winner disagree. This is the scenario the whole tool exists to catch.
-  - Every other in-play state gets a single "no data yet" placeholder row.
+    House has no mismatch scenario: each row is already one whole district
+    race with no sub-units to aggregate, so its own leader can't flip - see
+    HOUSE_SCENARIOS below.
+  - Every other in-play state (or district) gets a single "no data yet"
+    placeholder row.
 
 Only a few real counties are populated per scenario state - exactly like an
 actual election night, where most counties haven't reported yet. Any county
@@ -30,7 +35,7 @@ import csv
 from pathlib import Path
 
 from fetch_results import write_meta
-from races import CSV_HEADER, RACES, race_files
+from races import CSV_HEADER, HOUSE_DISTRICTS, RACES, race_files
 
 # Per-county scenario data, keyed by state name (races.py's weight tables use
 # the same proper names). Each race only uses the subset of these states it
@@ -82,6 +87,42 @@ SCENARIO_STATES = {
 }
 
 
+# A handful of real districts (races.py's HOUSE_DISTRICTS uses the same
+# GEOIDs), covering "match" scenarios only - both high-reporting ("certain")
+# and low-reporting ("projected"), for both parties. There is no "mismatch"
+# scenario for House in this pass: a mismatch needs sub-units reporting at
+# different rates to aggregate up into a flipped total (see
+# build_state_rows below), and a district-level row has no such sub-units
+# yet - see races.py's note on the deferred county-level drill-down.
+#
+# Tuples are (total expected votes, % in, Democrat share, Republican share).
+HOUSE_SCENARIOS = {
+    "5000": (350000, 96, 0.68, 0.32),   # Vermont At-Large: match, high reporting, Democrat
+    "5600": (280000, 20, 0.25, 0.75),   # Wyoming At-Large: match, low reporting, Republican
+    "1601": (320000, 97, 0.30, 0.70),   # Idaho District 1: match, high reporting, Republican
+    "1707": (300000, 15, 0.82, 0.18),   # Illinois District 7: match, low reporting, Democrat
+}
+
+
+def build_house_row(geoid, total_expected, percent_in, dem_share, rep_share):
+    info = HOUSE_DISTRICTS[geoid]
+    total_votes = round(total_expected * percent_in / 100)
+    dem_real = round(total_votes * dem_share)
+    rep_real = round(total_votes * rep_share)
+    return [
+        info["state"], info["label"], geoid, "districts",
+        total_expected, total_votes, float(percent_in),
+        dem_real, rep_real,
+        round(dem_real * 100 / percent_in), round(rep_real * 100 / percent_in),
+        "Democrat", "Republican",
+    ]
+
+
+def build_house_no_data_row(geoid):
+    info = HOUSE_DISTRICTS[geoid]
+    return [info["state"], info["label"], geoid, "districts", 0, 0, 0.0, 0, 0, 0, 0, "Democrat", "Republican"]
+
+
 def build_state_rows(state_name, counties):
     """One CSV row per populated county of a scenario state.
 
@@ -127,19 +168,32 @@ def main():
     parser.add_argument("--out-dir", default=".", help="Where to write the CSV (default: current directory)")
     args = parser.parse_args()
 
-    in_play_states = list(RACES[args.race]["weights"].keys())
-    data_states = {name: SCENARIO_STATES[name] for name in in_play_states if name in SCENARIO_STATES}
     output_csv = Path(args.out_dir) / race_files(args.race)["output_csv"].name
 
-    rows = []
-    for state_name in in_play_states:
-        if state_name not in data_states:
-            rows.append(build_no_data_row(state_name))
-            continue
+    if args.race == "house":
+        # Districts, not states - HOUSE_DISTRICTS/HOUSE_SCENARIOS are both
+        # keyed by GEOID, so this is its own small loop rather than forcing
+        # county-shaped build_state_rows()/build_no_data_row() to fit.
+        rows = [
+            build_house_row(geoid, *HOUSE_SCENARIOS[geoid]) if geoid in HOUSE_SCENARIOS
+            else build_house_no_data_row(geoid)
+            for geoid in HOUSE_DISTRICTS
+        ]
+        data_states = HOUSE_SCENARIOS
+        in_play_states = HOUSE_DISTRICTS
+    else:
+        in_play_states = list(RACES[args.race]["weights"].keys())
+        data_states = {name: SCENARIO_STATES[name] for name in in_play_states if name in SCENARIO_STATES}
 
-        state_rows = build_state_rows(state_name, data_states[state_name])
-        print_state_summary(state_name, state_rows)
-        rows.extend(state_rows)
+        rows = []
+        for state_name in in_play_states:
+            if state_name not in data_states:
+                rows.append(build_no_data_row(state_name))
+                continue
+
+            state_rows = build_state_rows(state_name, data_states[state_name])
+            print_state_summary(state_name, state_rows)
+            rows.extend(state_rows)
 
     with open(output_csv, "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file, delimiter=";")
@@ -148,7 +202,8 @@ def main():
 
     race = RACES[args.race]
     write_meta(output_csv, args.race, race["nbc_cycle"], rows, source="mock")
-    print(f"Wrote {len(rows)} rows ({len(data_states)} states with data, {len(in_play_states) - len(data_states)} with none yet) to {output_csv}")
+    unit = "districts" if args.race == "house" else "states"
+    print(f"Wrote {len(rows)} rows ({len(data_states)} {unit} with data, {len(in_play_states) - len(data_states)} with none yet) to {output_csv}")
     print(f"Mock {race['label']} {race['election_year']} data - not a real result.")
 
 

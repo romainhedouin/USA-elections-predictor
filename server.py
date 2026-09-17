@@ -29,14 +29,14 @@ ENVIRONMENT
     DATA_DIR         where the CSVs live, default ./data. Absolute paths work
                      (Railway mounts the volume at an absolute path).
     REFRESH_SECONDS  int, default 900.
-    RACES            comma-separated subset of president,senate,governor.
-                     Default: all three.
+    RACES            comma-separated subset of president,senate,governor,house.
+                     Default: all four.
     DATA_YEAR        optional; the cycle to pull. Also accepts NBC_CYCLE.
     FETCH_TIMEOUT    int seconds, hard kill for one fetch, default 300.
     SEED_ON_BOOT     "0" disables the cold-start mock seed. Default on.
     DEFAULT_RACE     which race a visitor lands on: president (default),
-                     senate or governor. Injected into the page; it does not
-                     affect what is fetched - that is RACES.
+                     senate, governor or house. Injected into the page; it
+                     does not affect what is fetched - that is RACES.
     REFRESH_ENABLED  "0" pauses fetching entirely. The site stays up and keeps
                      serving whatever is already on the volume; nothing is
                      pulled from upstream. Useful out of season, and the switch
@@ -74,7 +74,7 @@ DATA_YEAR = (os.environ.get("DATA_YEAR") or os.environ.get("NBC_CYCLE") or "").s
 SEED_ON_BOOT = os.environ.get("SEED_ON_BOOT", "1") not in ("0", "false", "no")
 REFRESH_ENABLED = os.environ.get("REFRESH_ENABLED", "1") not in ("0", "false", "no")
 
-ALL_RACES = ("president", "senate", "governor")
+ALL_RACES = ("president", "senate", "governor", "house")
 
 
 def _parse_races(raw):
@@ -333,8 +333,8 @@ def seed_if_empty():
     # race and fetches that race's CSV on click, so a race left unseeded is a
     # tab that 404s. Deliberately useful: pointing RACES at president alone
     # keeps the live pull to the one race that has real results today, while
-    # Senate and Governor sit on clearly-labelled mock fixtures until the 2026
-    # general election is published.
+    # Senate, Governor and House sit on clearly-labelled mock fixtures until
+    # the 2026 general election is published.
     missing = [r for r in ALL_RACES if not (DATA_DIR / csv_name(r)).exists()]
     if not missing:
         log.info("boot seed skipped - CSVs already present in %s", DATA_DIR)

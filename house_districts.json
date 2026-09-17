@@ -1,0 +1,1742 @@
+{
+ "1000": {
+  "state": "Delaware",
+  "label": "Delaware At-Large"
+ },
+ "1201": {
+  "state": "Florida",
+  "label": "Florida District 1"
+ },
+ "1202": {
+  "state": "Florida",
+  "label": "Florida District 2"
+ },
+ "1203": {
+  "state": "Florida",
+  "label": "Florida District 3"
+ },
+ "1204": {
+  "state": "Florida",
+  "label": "Florida District 4"
+ },
+ "1205": {
+  "state": "Florida",
+  "label": "Florida District 5"
+ },
+ "1206": {
+  "state": "Florida",
+  "label": "Florida District 6"
+ },
+ "1207": {
+  "state": "Florida",
+  "label": "Florida District 7"
+ },
+ "1208": {
+  "state": "Florida",
+  "label": "Florida District 8"
+ },
+ "1209": {
+  "state": "Florida",
+  "label": "Florida District 9"
+ },
+ "1210": {
+  "state": "Florida",
+  "label": "Florida District 10"
+ },
+ "1211": {
+  "state": "Florida",
+  "label": "Florida District 11"
+ },
+ "1212": {
+  "state": "Florida",
+  "label": "Florida District 12"
+ },
+ "1213": {
+  "state": "Florida",
+  "label": "Florida District 13"
+ },
+ "1214": {
+  "state": "Florida",
+  "label": "Florida District 14"
+ },
+ "1215": {
+  "state": "Florida",
+  "label": "Florida District 15"
+ },
+ "1216": {
+  "state": "Florida",
+  "label": "Florida District 16"
+ },
+ "1217": {
+  "state": "Florida",
+  "label": "Florida District 17"
+ },
+ "1218": {
+  "state": "Florida",
+  "label": "Florida District 18"
+ },
+ "1219": {
+  "state": "Florida",
+  "label": "Florida District 19"
+ },
+ "1220": {
+  "state": "Florida",
+  "label": "Florida District 20"
+ },
+ "1221": {
+  "state": "Florida",
+  "label": "Florida District 21"
+ },
+ "1222": {
+  "state": "Florida",
+  "label": "Florida District 22"
+ },
+ "1223": {
+  "state": "Florida",
+  "label": "Florida District 23"
+ },
+ "1224": {
+  "state": "Florida",
+  "label": "Florida District 24"
+ },
+ "1225": {
+  "state": "Florida",
+  "label": "Florida District 25"
+ },
+ "1226": {
+  "state": "Florida",
+  "label": "Florida District 26"
+ },
+ "1227": {
+  "state": "Florida",
+  "label": "Florida District 27"
+ },
+ "1228": {
+  "state": "Florida",
+  "label": "Florida District 28"
+ },
+ "1301": {
+  "state": "Georgia",
+  "label": "Georgia District 1"
+ },
+ "1302": {
+  "state": "Georgia",
+  "label": "Georgia District 2"
+ },
+ "1303": {
+  "state": "Georgia",
+  "label": "Georgia District 3"
+ },
+ "1304": {
+  "state": "Georgia",
+  "label": "Georgia District 4"
+ },
+ "1305": {
+  "state": "Georgia",
+  "label": "Georgia District 5"
+ },
+ "1306": {
+  "state": "Georgia",
+  "label": "Georgia District 6"
+ },
+ "1307": {
+  "state": "Georgia",
+  "label": "Georgia District 7"
+ },
+ "1308": {
+  "state": "Georgia",
+  "label": "Georgia District 8"
+ },
+ "1309": {
+  "state": "Georgia",
+  "label": "Georgia District 9"
+ },
+ "1310": {
+  "state": "Georgia",
+  "label": "Georgia District 10"
+ },
+ "1311": {
+  "state": "Georgia",
+  "label": "Georgia District 11"
+ },
+ "1312": {
+  "state": "Georgia",
+  "label": "Georgia District 12"
+ },
+ "1313": {
+  "state": "Georgia",
+  "label": "Georgia District 13"
+ },
+ "1314": {
+  "state": "Georgia",
+  "label": "Georgia District 14"
+ },
+ "1501": {
+  "state": "Hawaii",
+  "label": "Hawaii District 1"
+ },
+ "1502": {
+  "state": "Hawaii",
+  "label": "Hawaii District 2"
+ },
+ "1601": {
+  "state": "Idaho",
+  "label": "Idaho District 1"
+ },
+ "1602": {
+  "state": "Idaho",
+  "label": "Idaho District 2"
+ },
+ "1701": {
+  "state": "Illinois",
+  "label": "Illinois District 1"
+ },
+ "1702": {
+  "state": "Illinois",
+  "label": "Illinois District 2"
+ },
+ "1703": {
+  "state": "Illinois",
+  "label": "Illinois District 3"
+ },
+ "1704": {
+  "state": "Illinois",
+  "label": "Illinois District 4"
+ },
+ "1705": {
+  "state": "Illinois",
+  "label": "Illinois District 5"
+ },
+ "1706": {
+  "state": "Illinois",
+  "label": "Illinois District 6"
+ },
+ "1707": {
+  "state": "Illinois",
+  "label": "Illinois District 7"
+ },
+ "1708": {
+  "state": "Illinois",
+  "label": "Illinois District 8"
+ },
+ "1709": {
+  "state": "Illinois",
+  "label": "Illinois District 9"
+ },
+ "1710": {
+  "state": "Illinois",
+  "label": "Illinois District 10"
+ },
+ "1711": {
+  "state": "Illinois",
+  "label": "Illinois District 11"
+ },
+ "1712": {
+  "state": "Illinois",
+  "label": "Illinois District 12"
+ },
+ "1713": {
+  "state": "Illinois",
+  "label": "Illinois District 13"
+ },
+ "1714": {
+  "state": "Illinois",
+  "label": "Illinois District 14"
+ },
+ "1715": {
+  "state": "Illinois",
+  "label": "Illinois District 15"
+ },
+ "1716": {
+  "state": "Illinois",
+  "label": "Illinois District 16"
+ },
+ "1717": {
+  "state": "Illinois",
+  "label": "Illinois District 17"
+ },
+ "1801": {
+  "state": "Indiana",
+  "label": "Indiana District 1"
+ },
+ "1802": {
+  "state": "Indiana",
+  "label": "Indiana District 2"
+ },
+ "1803": {
+  "state": "Indiana",
+  "label": "Indiana District 3"
+ },
+ "1804": {
+  "state": "Indiana",
+  "label": "Indiana District 4"
+ },
+ "1805": {
+  "state": "Indiana",
+  "label": "Indiana District 5"
+ },
+ "1806": {
+  "state": "Indiana",
+  "label": "Indiana District 6"
+ },
+ "1807": {
+  "state": "Indiana",
+  "label": "Indiana District 7"
+ },
+ "1808": {
+  "state": "Indiana",
+  "label": "Indiana District 8"
+ },
+ "1809": {
+  "state": "Indiana",
+  "label": "Indiana District 9"
+ },
+ "1901": {
+  "state": "Iowa",
+  "label": "Iowa District 1"
+ },
+ "1902": {
+  "state": "Iowa",
+  "label": "Iowa District 2"
+ },
+ "1903": {
+  "state": "Iowa",
+  "label": "Iowa District 3"
+ },
+ "1904": {
+  "state": "Iowa",
+  "label": "Iowa District 4"
+ },
+ "2001": {
+  "state": "Kansas",
+  "label": "Kansas District 1"
+ },
+ "2002": {
+  "state": "Kansas",
+  "label": "Kansas District 2"
+ },
+ "2003": {
+  "state": "Kansas",
+  "label": "Kansas District 3"
+ },
+ "2004": {
+  "state": "Kansas",
+  "label": "Kansas District 4"
+ },
+ "2101": {
+  "state": "Kentucky",
+  "label": "Kentucky District 1"
+ },
+ "2102": {
+  "state": "Kentucky",
+  "label": "Kentucky District 2"
+ },
+ "2103": {
+  "state": "Kentucky",
+  "label": "Kentucky District 3"
+ },
+ "2104": {
+  "state": "Kentucky",
+  "label": "Kentucky District 4"
+ },
+ "2105": {
+  "state": "Kentucky",
+  "label": "Kentucky District 5"
+ },
+ "2106": {
+  "state": "Kentucky",
+  "label": "Kentucky District 6"
+ },
+ "2201": {
+  "state": "Louisiana",
+  "label": "Louisiana District 1"
+ },
+ "2202": {
+  "state": "Louisiana",
+  "label": "Louisiana District 2"
+ },
+ "2203": {
+  "state": "Louisiana",
+  "label": "Louisiana District 3"
+ },
+ "2204": {
+  "state": "Louisiana",
+  "label": "Louisiana District 4"
+ },
+ "2205": {
+  "state": "Louisiana",
+  "label": "Louisiana District 5"
+ },
+ "2206": {
+  "state": "Louisiana",
+  "label": "Louisiana District 6"
+ },
+ "2301": {
+  "state": "Maine",
+  "label": "Maine District 1"
+ },
+ "2302": {
+  "state": "Maine",
+  "label": "Maine District 2"
+ },
+ "2401": {
+  "state": "Maryland",
+  "label": "Maryland District 1"
+ },
+ "2402": {
+  "state": "Maryland",
+  "label": "Maryland District 2"
+ },
+ "2403": {
+  "state": "Maryland",
+  "label": "Maryland District 3"
+ },
+ "2404": {
+  "state": "Maryland",
+  "label": "Maryland District 4"
+ },
+ "2405": {
+  "state": "Maryland",
+  "label": "Maryland District 5"
+ },
+ "2406": {
+  "state": "Maryland",
+  "label": "Maryland District 6"
+ },
+ "2407": {
+  "state": "Maryland",
+  "label": "Maryland District 7"
+ },
+ "2408": {
+  "state": "Maryland",
+  "label": "Maryland District 8"
+ },
+ "2501": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 1"
+ },
+ "2502": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 2"
+ },
+ "2503": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 3"
+ },
+ "2504": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 4"
+ },
+ "2505": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 5"
+ },
+ "2506": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 6"
+ },
+ "2507": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 7"
+ },
+ "2508": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 8"
+ },
+ "2509": {
+  "state": "Massachusetts",
+  "label": "Massachusetts District 9"
+ },
+ "2601": {
+  "state": "Michigan",
+  "label": "Michigan District 1"
+ },
+ "2602": {
+  "state": "Michigan",
+  "label": "Michigan District 2"
+ },
+ "2603": {
+  "state": "Michigan",
+  "label": "Michigan District 3"
+ },
+ "2604": {
+  "state": "Michigan",
+  "label": "Michigan District 4"
+ },
+ "2605": {
+  "state": "Michigan",
+  "label": "Michigan District 5"
+ },
+ "2606": {
+  "state": "Michigan",
+  "label": "Michigan District 6"
+ },
+ "2607": {
+  "state": "Michigan",
+  "label": "Michigan District 7"
+ },
+ "2608": {
+  "state": "Michigan",
+  "label": "Michigan District 8"
+ },
+ "2609": {
+  "state": "Michigan",
+  "label": "Michigan District 9"
+ },
+ "2610": {
+  "state": "Michigan",
+  "label": "Michigan District 10"
+ },
+ "2611": {
+  "state": "Michigan",
+  "label": "Michigan District 11"
+ },
+ "2612": {
+  "state": "Michigan",
+  "label": "Michigan District 12"
+ },
+ "2613": {
+  "state": "Michigan",
+  "label": "Michigan District 13"
+ },
+ "2701": {
+  "state": "Minnesota",
+  "label": "Minnesota District 1"
+ },
+ "2702": {
+  "state": "Minnesota",
+  "label": "Minnesota District 2"
+ },
+ "2703": {
+  "state": "Minnesota",
+  "label": "Minnesota District 3"
+ },
+ "2704": {
+  "state": "Minnesota",
+  "label": "Minnesota District 4"
+ },
+ "2705": {
+  "state": "Minnesota",
+  "label": "Minnesota District 5"
+ },
+ "2706": {
+  "state": "Minnesota",
+  "label": "Minnesota District 6"
+ },
+ "2707": {
+  "state": "Minnesota",
+  "label": "Minnesota District 7"
+ },
+ "2708": {
+  "state": "Minnesota",
+  "label": "Minnesota District 8"
+ },
+ "2801": {
+  "state": "Mississippi",
+  "label": "Mississippi District 1"
+ },
+ "2802": {
+  "state": "Mississippi",
+  "label": "Mississippi District 2"
+ },
+ "2803": {
+  "state": "Mississippi",
+  "label": "Mississippi District 3"
+ },
+ "2804": {
+  "state": "Mississippi",
+  "label": "Mississippi District 4"
+ },
+ "2901": {
+  "state": "Missouri",
+  "label": "Missouri District 1"
+ },
+ "2902": {
+  "state": "Missouri",
+  "label": "Missouri District 2"
+ },
+ "2903": {
+  "state": "Missouri",
+  "label": "Missouri District 3"
+ },
+ "2904": {
+  "state": "Missouri",
+  "label": "Missouri District 4"
+ },
+ "2905": {
+  "state": "Missouri",
+  "label": "Missouri District 5"
+ },
+ "2906": {
+  "state": "Missouri",
+  "label": "Missouri District 6"
+ },
+ "2907": {
+  "state": "Missouri",
+  "label": "Missouri District 7"
+ },
+ "2908": {
+  "state": "Missouri",
+  "label": "Missouri District 8"
+ },
+ "3001": {
+  "state": "Montana",
+  "label": "Montana District 1"
+ },
+ "3002": {
+  "state": "Montana",
+  "label": "Montana District 2"
+ },
+ "3101": {
+  "state": "Nebraska",
+  "label": "Nebraska District 1"
+ },
+ "3102": {
+  "state": "Nebraska",
+  "label": "Nebraska District 2"
+ },
+ "3103": {
+  "state": "Nebraska",
+  "label": "Nebraska District 3"
+ },
+ "3201": {
+  "state": "Nevada",
+  "label": "Nevada District 1"
+ },
+ "3202": {
+  "state": "Nevada",
+  "label": "Nevada District 2"
+ },
+ "3203": {
+  "state": "Nevada",
+  "label": "Nevada District 3"
+ },
+ "3204": {
+  "state": "Nevada",
+  "label": "Nevada District 4"
+ },
+ "3301": {
+  "state": "New Hampshire",
+  "label": "New Hampshire District 1"
+ },
+ "3302": {
+  "state": "New Hampshire",
+  "label": "New Hampshire District 2"
+ },
+ "3401": {
+  "state": "New Jersey",
+  "label": "New Jersey District 1"
+ },
+ "3402": {
+  "state": "New Jersey",
+  "label": "New Jersey District 2"
+ },
+ "3403": {
+  "state": "New Jersey",
+  "label": "New Jersey District 3"
+ },
+ "3404": {
+  "state": "New Jersey",
+  "label": "New Jersey District 4"
+ },
+ "3405": {
+  "state": "New Jersey",
+  "label": "New Jersey District 5"
+ },
+ "3406": {
+  "state": "New Jersey",
+  "label": "New Jersey District 6"
+ },
+ "3407": {
+  "state": "New Jersey",
+  "label": "New Jersey District 7"
+ },
+ "3408": {
+  "state": "New Jersey",
+  "label": "New Jersey District 8"
+ },
+ "3409": {
+  "state": "New Jersey",
+  "label": "New Jersey District 9"
+ },
+ "3410": {
+  "state": "New Jersey",
+  "label": "New Jersey District 10"
+ },
+ "3411": {
+  "state": "New Jersey",
+  "label": "New Jersey District 11"
+ },
+ "3412": {
+  "state": "New Jersey",
+  "label": "New Jersey District 12"
+ },
+ "3501": {
+  "state": "New Mexico",
+  "label": "New Mexico District 1"
+ },
+ "3502": {
+  "state": "New Mexico",
+  "label": "New Mexico District 2"
+ },
+ "3503": {
+  "state": "New Mexico",
+  "label": "New Mexico District 3"
+ },
+ "3601": {
+  "state": "New York",
+  "label": "New York District 1"
+ },
+ "3602": {
+  "state": "New York",
+  "label": "New York District 2"
+ },
+ "3603": {
+  "state": "New York",
+  "label": "New York District 3"
+ },
+ "3604": {
+  "state": "New York",
+  "label": "New York District 4"
+ },
+ "3605": {
+  "state": "New York",
+  "label": "New York District 5"
+ },
+ "3606": {
+  "state": "New York",
+  "label": "New York District 6"
+ },
+ "3607": {
+  "state": "New York",
+  "label": "New York District 7"
+ },
+ "3608": {
+  "state": "New York",
+  "label": "New York District 8"
+ },
+ "3609": {
+  "state": "New York",
+  "label": "New York District 9"
+ },
+ "3610": {
+  "state": "New York",
+  "label": "New York District 10"
+ },
+ "3611": {
+  "state": "New York",
+  "label": "New York District 11"
+ },
+ "3612": {
+  "state": "New York",
+  "label": "New York District 12"
+ },
+ "3613": {
+  "state": "New York",
+  "label": "New York District 13"
+ },
+ "3614": {
+  "state": "New York",
+  "label": "New York District 14"
+ },
+ "3615": {
+  "state": "New York",
+  "label": "New York District 15"
+ },
+ "3616": {
+  "state": "New York",
+  "label": "New York District 16"
+ },
+ "3617": {
+  "state": "New York",
+  "label": "New York District 17"
+ },
+ "3618": {
+  "state": "New York",
+  "label": "New York District 18"
+ },
+ "3619": {
+  "state": "New York",
+  "label": "New York District 19"
+ },
+ "3620": {
+  "state": "New York",
+  "label": "New York District 20"
+ },
+ "3621": {
+  "state": "New York",
+  "label": "New York District 21"
+ },
+ "3622": {
+  "state": "New York",
+  "label": "New York District 22"
+ },
+ "3623": {
+  "state": "New York",
+  "label": "New York District 23"
+ },
+ "3624": {
+  "state": "New York",
+  "label": "New York District 24"
+ },
+ "3625": {
+  "state": "New York",
+  "label": "New York District 25"
+ },
+ "3626": {
+  "state": "New York",
+  "label": "New York District 26"
+ },
+ "3701": {
+  "state": "North Carolina",
+  "label": "North Carolina District 1"
+ },
+ "3702": {
+  "state": "North Carolina",
+  "label": "North Carolina District 2"
+ },
+ "3703": {
+  "state": "North Carolina",
+  "label": "North Carolina District 3"
+ },
+ "3704": {
+  "state": "North Carolina",
+  "label": "North Carolina District 4"
+ },
+ "3705": {
+  "state": "North Carolina",
+  "label": "North Carolina District 5"
+ },
+ "3706": {
+  "state": "North Carolina",
+  "label": "North Carolina District 6"
+ },
+ "3707": {
+  "state": "North Carolina",
+  "label": "North Carolina District 7"
+ },
+ "3708": {
+  "state": "North Carolina",
+  "label": "North Carolina District 8"
+ },
+ "3709": {
+  "state": "North Carolina",
+  "label": "North Carolina District 9"
+ },
+ "3710": {
+  "state": "North Carolina",
+  "label": "North Carolina District 10"
+ },
+ "3711": {
+  "state": "North Carolina",
+  "label": "North Carolina District 11"
+ },
+ "3712": {
+  "state": "North Carolina",
+  "label": "North Carolina District 12"
+ },
+ "3713": {
+  "state": "North Carolina",
+  "label": "North Carolina District 13"
+ },
+ "3714": {
+  "state": "North Carolina",
+  "label": "North Carolina District 14"
+ },
+ "3800": {
+  "state": "North Dakota",
+  "label": "North Dakota At-Large"
+ },
+ "3901": {
+  "state": "Ohio",
+  "label": "Ohio District 1"
+ },
+ "3902": {
+  "state": "Ohio",
+  "label": "Ohio District 2"
+ },
+ "3903": {
+  "state": "Ohio",
+  "label": "Ohio District 3"
+ },
+ "3904": {
+  "state": "Ohio",
+  "label": "Ohio District 4"
+ },
+ "3905": {
+  "state": "Ohio",
+  "label": "Ohio District 5"
+ },
+ "3906": {
+  "state": "Ohio",
+  "label": "Ohio District 6"
+ },
+ "3907": {
+  "state": "Ohio",
+  "label": "Ohio District 7"
+ },
+ "3908": {
+  "state": "Ohio",
+  "label": "Ohio District 8"
+ },
+ "3909": {
+  "state": "Ohio",
+  "label": "Ohio District 9"
+ },
+ "3910": {
+  "state": "Ohio",
+  "label": "Ohio District 10"
+ },
+ "3911": {
+  "state": "Ohio",
+  "label": "Ohio District 11"
+ },
+ "3912": {
+  "state": "Ohio",
+  "label": "Ohio District 12"
+ },
+ "3913": {
+  "state": "Ohio",
+  "label": "Ohio District 13"
+ },
+ "3914": {
+  "state": "Ohio",
+  "label": "Ohio District 14"
+ },
+ "3915": {
+  "state": "Ohio",
+  "label": "Ohio District 15"
+ },
+ "4001": {
+  "state": "Oklahoma",
+  "label": "Oklahoma District 1"
+ },
+ "4002": {
+  "state": "Oklahoma",
+  "label": "Oklahoma District 2"
+ },
+ "4003": {
+  "state": "Oklahoma",
+  "label": "Oklahoma District 3"
+ },
+ "4004": {
+  "state": "Oklahoma",
+  "label": "Oklahoma District 4"
+ },
+ "4005": {
+  "state": "Oklahoma",
+  "label": "Oklahoma District 5"
+ },
+ "4101": {
+  "state": "Oregon",
+  "label": "Oregon District 1"
+ },
+ "4102": {
+  "state": "Oregon",
+  "label": "Oregon District 2"
+ },
+ "4103": {
+  "state": "Oregon",
+  "label": "Oregon District 3"
+ },
+ "4104": {
+  "state": "Oregon",
+  "label": "Oregon District 4"
+ },
+ "4105": {
+  "state": "Oregon",
+  "label": "Oregon District 5"
+ },
+ "4106": {
+  "state": "Oregon",
+  "label": "Oregon District 6"
+ },
+ "4201": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 1"
+ },
+ "4202": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 2"
+ },
+ "4203": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 3"
+ },
+ "4204": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 4"
+ },
+ "4205": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 5"
+ },
+ "4206": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 6"
+ },
+ "4207": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 7"
+ },
+ "4208": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 8"
+ },
+ "4209": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 9"
+ },
+ "4210": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 10"
+ },
+ "4211": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 11"
+ },
+ "4212": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 12"
+ },
+ "4213": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 13"
+ },
+ "4214": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 14"
+ },
+ "4215": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 15"
+ },
+ "4216": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 16"
+ },
+ "4217": {
+  "state": "Pennsylvania",
+  "label": "Pennsylvania District 17"
+ },
+ "4401": {
+  "state": "Rhode Island",
+  "label": "Rhode Island District 1"
+ },
+ "4402": {
+  "state": "Rhode Island",
+  "label": "Rhode Island District 2"
+ },
+ "4501": {
+  "state": "South Carolina",
+  "label": "South Carolina District 1"
+ },
+ "4502": {
+  "state": "South Carolina",
+  "label": "South Carolina District 2"
+ },
+ "4503": {
+  "state": "South Carolina",
+  "label": "South Carolina District 3"
+ },
+ "4504": {
+  "state": "South Carolina",
+  "label": "South Carolina District 4"
+ },
+ "4505": {
+  "state": "South Carolina",
+  "label": "South Carolina District 5"
+ },
+ "4506": {
+  "state": "South Carolina",
+  "label": "South Carolina District 6"
+ },
+ "4507": {
+  "state": "South Carolina",
+  "label": "South Carolina District 7"
+ },
+ "4600": {
+  "state": "South Dakota",
+  "label": "South Dakota At-Large"
+ },
+ "4701": {
+  "state": "Tennessee",
+  "label": "Tennessee District 1"
+ },
+ "4702": {
+  "state": "Tennessee",
+  "label": "Tennessee District 2"
+ },
+ "4703": {
+  "state": "Tennessee",
+  "label": "Tennessee District 3"
+ },
+ "4704": {
+  "state": "Tennessee",
+  "label": "Tennessee District 4"
+ },
+ "4705": {
+  "state": "Tennessee",
+  "label": "Tennessee District 5"
+ },
+ "4706": {
+  "state": "Tennessee",
+  "label": "Tennessee District 6"
+ },
+ "4707": {
+  "state": "Tennessee",
+  "label": "Tennessee District 7"
+ },
+ "4708": {
+  "state": "Tennessee",
+  "label": "Tennessee District 8"
+ },
+ "4709": {
+  "state": "Tennessee",
+  "label": "Tennessee District 9"
+ },
+ "4801": {
+  "state": "Texas",
+  "label": "Texas District 1"
+ },
+ "4802": {
+  "state": "Texas",
+  "label": "Texas District 2"
+ },
+ "4803": {
+  "state": "Texas",
+  "label": "Texas District 3"
+ },
+ "4804": {
+  "state": "Texas",
+  "label": "Texas District 4"
+ },
+ "4805": {
+  "state": "Texas",
+  "label": "Texas District 5"
+ },
+ "4806": {
+  "state": "Texas",
+  "label": "Texas District 6"
+ },
+ "4807": {
+  "state": "Texas",
+  "label": "Texas District 7"
+ },
+ "4808": {
+  "state": "Texas",
+  "label": "Texas District 8"
+ },
+ "4809": {
+  "state": "Texas",
+  "label": "Texas District 9"
+ },
+ "4810": {
+  "state": "Texas",
+  "label": "Texas District 10"
+ },
+ "4811": {
+  "state": "Texas",
+  "label": "Texas District 11"
+ },
+ "4812": {
+  "state": "Texas",
+  "label": "Texas District 12"
+ },
+ "4813": {
+  "state": "Texas",
+  "label": "Texas District 13"
+ },
+ "4814": {
+  "state": "Texas",
+  "label": "Texas District 14"
+ },
+ "4815": {
+  "state": "Texas",
+  "label": "Texas District 15"
+ },
+ "4816": {
+  "state": "Texas",
+  "label": "Texas District 16"
+ },
+ "4817": {
+  "state": "Texas",
+  "label": "Texas District 17"
+ },
+ "4818": {
+  "state": "Texas",
+  "label": "Texas District 18"
+ },
+ "4819": {
+  "state": "Texas",
+  "label": "Texas District 19"
+ },
+ "4820": {
+  "state": "Texas",
+  "label": "Texas District 20"
+ },
+ "4821": {
+  "state": "Texas",
+  "label": "Texas District 21"
+ },
+ "4822": {
+  "state": "Texas",
+  "label": "Texas District 22"
+ },
+ "4823": {
+  "state": "Texas",
+  "label": "Texas District 23"
+ },
+ "4824": {
+  "state": "Texas",
+  "label": "Texas District 24"
+ },
+ "4825": {
+  "state": "Texas",
+  "label": "Texas District 25"
+ },
+ "4826": {
+  "state": "Texas",
+  "label": "Texas District 26"
+ },
+ "4827": {
+  "state": "Texas",
+  "label": "Texas District 27"
+ },
+ "4828": {
+  "state": "Texas",
+  "label": "Texas District 28"
+ },
+ "4829": {
+  "state": "Texas",
+  "label": "Texas District 29"
+ },
+ "4830": {
+  "state": "Texas",
+  "label": "Texas District 30"
+ },
+ "4831": {
+  "state": "Texas",
+  "label": "Texas District 31"
+ },
+ "4832": {
+  "state": "Texas",
+  "label": "Texas District 32"
+ },
+ "4833": {
+  "state": "Texas",
+  "label": "Texas District 33"
+ },
+ "4834": {
+  "state": "Texas",
+  "label": "Texas District 34"
+ },
+ "4835": {
+  "state": "Texas",
+  "label": "Texas District 35"
+ },
+ "4836": {
+  "state": "Texas",
+  "label": "Texas District 36"
+ },
+ "4837": {
+  "state": "Texas",
+  "label": "Texas District 37"
+ },
+ "4838": {
+  "state": "Texas",
+  "label": "Texas District 38"
+ },
+ "4901": {
+  "state": "Utah",
+  "label": "Utah District 1"
+ },
+ "4902": {
+  "state": "Utah",
+  "label": "Utah District 2"
+ },
+ "4903": {
+  "state": "Utah",
+  "label": "Utah District 3"
+ },
+ "4904": {
+  "state": "Utah",
+  "label": "Utah District 4"
+ },
+ "5000": {
+  "state": "Vermont",
+  "label": "Vermont At-Large"
+ },
+ "5101": {
+  "state": "Virginia",
+  "label": "Virginia District 1"
+ },
+ "5102": {
+  "state": "Virginia",
+  "label": "Virginia District 2"
+ },
+ "5103": {
+  "state": "Virginia",
+  "label": "Virginia District 3"
+ },
+ "5104": {
+  "state": "Virginia",
+  "label": "Virginia District 4"
+ },
+ "5105": {
+  "state": "Virginia",
+  "label": "Virginia District 5"
+ },
+ "5106": {
+  "state": "Virginia",
+  "label": "Virginia District 6"
+ },
+ "5107": {
+  "state": "Virginia",
+  "label": "Virginia District 7"
+ },
+ "5108": {
+  "state": "Virginia",
+  "label": "Virginia District 8"
+ },
+ "5109": {
+  "state": "Virginia",
+  "label": "Virginia District 9"
+ },
+ "5110": {
+  "state": "Virginia",
+  "label": "Virginia District 10"
+ },
+ "5111": {
+  "state": "Virginia",
+  "label": "Virginia District 11"
+ },
+ "5301": {
+  "state": "Washington",
+  "label": "Washington District 1"
+ },
+ "5302": {
+  "state": "Washington",
+  "label": "Washington District 2"
+ },
+ "5303": {
+  "state": "Washington",
+  "label": "Washington District 3"
+ },
+ "5304": {
+  "state": "Washington",
+  "label": "Washington District 4"
+ },
+ "5305": {
+  "state": "Washington",
+  "label": "Washington District 5"
+ },
+ "5306": {
+  "state": "Washington",
+  "label": "Washington District 6"
+ },
+ "5307": {
+  "state": "Washington",
+  "label": "Washington District 7"
+ },
+ "5308": {
+  "state": "Washington",
+  "label": "Washington District 8"
+ },
+ "5309": {
+  "state": "Washington",
+  "label": "Washington District 9"
+ },
+ "5310": {
+  "state": "Washington",
+  "label": "Washington District 10"
+ },
+ "5401": {
+  "state": "West Virginia",
+  "label": "West Virginia District 1"
+ },
+ "5402": {
+  "state": "West Virginia",
+  "label": "West Virginia District 2"
+ },
+ "5501": {
+  "state": "Wisconsin",
+  "label": "Wisconsin District 1"
+ },
+ "5502": {
+  "state": "Wisconsin",
+  "label": "Wisconsin District 2"
+ },
+ "5503": {
+  "state": "Wisconsin",
+  "label": "Wisconsin District 3"
+ },
+ "5504": {
+  "state": "Wisconsin",
+  "label": "Wisconsin District 4"
+ },
+ "5505": {
+  "state": "Wisconsin",
+  "label": "Wisconsin District 5"
+ },
+ "5506": {
+  "state": "Wisconsin",
+  "label": "Wisconsin District 6"
+ },
+ "5507": {
+  "state": "Wisconsin",
+  "label": "Wisconsin District 7"
+ },
+ "5508": {
+  "state": "Wisconsin",
+  "label": "Wisconsin District 8"
+ },
+ "5600": {
+  "state": "Wyoming",
+  "label": "Wyoming At-Large"
+ },
+ "0101": {
+  "state": "Alabama",
+  "label": "Alabama District 1"
+ },
+ "0102": {
+  "state": "Alabama",
+  "label": "Alabama District 2"
+ },
+ "0103": {
+  "state": "Alabama",
+  "label": "Alabama District 3"
+ },
+ "0104": {
+  "state": "Alabama",
+  "label": "Alabama District 4"
+ },
+ "0105": {
+  "state": "Alabama",
+  "label": "Alabama District 5"
+ },
+ "0106": {
+  "state": "Alabama",
+  "label": "Alabama District 6"
+ },
+ "0107": {
+  "state": "Alabama",
+  "label": "Alabama District 7"
+ },
+ "0200": {
+  "state": "Alaska",
+  "label": "Alaska At-Large"
+ },
+ "0401": {
+  "state": "Arizona",
+  "label": "Arizona District 1"
+ },
+ "0402": {
+  "state": "Arizona",
+  "label": "Arizona District 2"
+ },
+ "0403": {
+  "state": "Arizona",
+  "label": "Arizona District 3"
+ },
+ "0404": {
+  "state": "Arizona",
+  "label": "Arizona District 4"
+ },
+ "0405": {
+  "state": "Arizona",
+  "label": "Arizona District 5"
+ },
+ "0406": {
+  "state": "Arizona",
+  "label": "Arizona District 6"
+ },
+ "0407": {
+  "state": "Arizona",
+  "label": "Arizona District 7"
+ },
+ "0408": {
+  "state": "Arizona",
+  "label": "Arizona District 8"
+ },
+ "0409": {
+  "state": "Arizona",
+  "label": "Arizona District 9"
+ },
+ "0501": {
+  "state": "Arkansas",
+  "label": "Arkansas District 1"
+ },
+ "0502": {
+  "state": "Arkansas",
+  "label": "Arkansas District 2"
+ },
+ "0503": {
+  "state": "Arkansas",
+  "label": "Arkansas District 3"
+ },
+ "0504": {
+  "state": "Arkansas",
+  "label": "Arkansas District 4"
+ },
+ "0601": {
+  "state": "California",
+  "label": "California District 1"
+ },
+ "0602": {
+  "state": "California",
+  "label": "California District 2"
+ },
+ "0603": {
+  "state": "California",
+  "label": "California District 3"
+ },
+ "0604": {
+  "state": "California",
+  "label": "California District 4"
+ },
+ "0605": {
+  "state": "California",
+  "label": "California District 5"
+ },
+ "0606": {
+  "state": "California",
+  "label": "California District 6"
+ },
+ "0607": {
+  "state": "California",
+  "label": "California District 7"
+ },
+ "0608": {
+  "state": "California",
+  "label": "California District 8"
+ },
+ "0609": {
+  "state": "California",
+  "label": "California District 9"
+ },
+ "0610": {
+  "state": "California",
+  "label": "California District 10"
+ },
+ "0611": {
+  "state": "California",
+  "label": "California District 11"
+ },
+ "0612": {
+  "state": "California",
+  "label": "California District 12"
+ },
+ "0613": {
+  "state": "California",
+  "label": "California District 13"
+ },
+ "0614": {
+  "state": "California",
+  "label": "California District 14"
+ },
+ "0615": {
+  "state": "California",
+  "label": "California District 15"
+ },
+ "0616": {
+  "state": "California",
+  "label": "California District 16"
+ },
+ "0617": {
+  "state": "California",
+  "label": "California District 17"
+ },
+ "0618": {
+  "state": "California",
+  "label": "California District 18"
+ },
+ "0619": {
+  "state": "California",
+  "label": "California District 19"
+ },
+ "0620": {
+  "state": "California",
+  "label": "California District 20"
+ },
+ "0621": {
+  "state": "California",
+  "label": "California District 21"
+ },
+ "0622": {
+  "state": "California",
+  "label": "California District 22"
+ },
+ "0623": {
+  "state": "California",
+  "label": "California District 23"
+ },
+ "0624": {
+  "state": "California",
+  "label": "California District 24"
+ },
+ "0625": {
+  "state": "California",
+  "label": "California District 25"
+ },
+ "0626": {
+  "state": "California",
+  "label": "California District 26"
+ },
+ "0627": {
+  "state": "California",
+  "label": "California District 27"
+ },
+ "0628": {
+  "state": "California",
+  "label": "California District 28"
+ },
+ "0629": {
+  "state": "California",
+  "label": "California District 29"
+ },
+ "0630": {
+  "state": "California",
+  "label": "California District 30"
+ },
+ "0631": {
+  "state": "California",
+  "label": "California District 31"
+ },
+ "0632": {
+  "state": "California",
+  "label": "California District 32"
+ },
+ "0633": {
+  "state": "California",
+  "label": "California District 33"
+ },
+ "0634": {
+  "state": "California",
+  "label": "California District 34"
+ },
+ "0635": {
+  "state": "California",
+  "label": "California District 35"
+ },
+ "0636": {
+  "state": "California",
+  "label": "California District 36"
+ },
+ "0637": {
+  "state": "California",
+  "label": "California District 37"
+ },
+ "0638": {
+  "state": "California",
+  "label": "California District 38"
+ },
+ "0639": {
+  "state": "California",
+  "label": "California District 39"
+ },
+ "0640": {
+  "state": "California",
+  "label": "California District 40"
+ },
+ "0641": {
+  "state": "California",
+  "label": "California District 41"
+ },
+ "0642": {
+  "state": "California",
+  "label": "California District 42"
+ },
+ "0643": {
+  "state": "California",
+  "label": "California District 43"
+ },
+ "0644": {
+  "state": "California",
+  "label": "California District 44"
+ },
+ "0645": {
+  "state": "California",
+  "label": "California District 45"
+ },
+ "0646": {
+  "state": "California",
+  "label": "California District 46"
+ },
+ "0647": {
+  "state": "California",
+  "label": "California District 47"
+ },
+ "0648": {
+  "state": "California",
+  "label": "California District 48"
+ },
+ "0649": {
+  "state": "California",
+  "label": "California District 49"
+ },
+ "0650": {
+  "state": "California",
+  "label": "California District 50"
+ },
+ "0651": {
+  "state": "California",
+  "label": "California District 51"
+ },
+ "0652": {
+  "state": "California",
+  "label": "California District 52"
+ },
+ "0801": {
+  "state": "Colorado",
+  "label": "Colorado District 1"
+ },
+ "0802": {
+  "state": "Colorado",
+  "label": "Colorado District 2"
+ },
+ "0803": {
+  "state": "Colorado",
+  "label": "Colorado District 3"
+ },
+ "0804": {
+  "state": "Colorado",
+  "label": "Colorado District 4"
+ },
+ "0805": {
+  "state": "Colorado",
+  "label": "Colorado District 5"
+ },
+ "0806": {
+  "state": "Colorado",
+  "label": "Colorado District 6"
+ },
+ "0807": {
+  "state": "Colorado",
+  "label": "Colorado District 7"
+ },
+ "0808": {
+  "state": "Colorado",
+  "label": "Colorado District 8"
+ },
+ "0901": {
+  "state": "Connecticut",
+  "label": "Connecticut District 1"
+ },
+ "0902": {
+  "state": "Connecticut",
+  "label": "Connecticut District 2"
+ },
+ "0903": {
+  "state": "Connecticut",
+  "label": "Connecticut District 3"
+ },
+ "0904": {
+  "state": "Connecticut",
+  "label": "Connecticut District 4"
+ },
+ "0905": {
+  "state": "Connecticut",
+  "label": "Connecticut District 5"
+ }
+}

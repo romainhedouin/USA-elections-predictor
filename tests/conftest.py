@@ -44,7 +44,11 @@ def site(tmp_path_factory):
     """map.html + mock CSVs in a temp dir."""
     root = tmp_path_factory.mktemp("site")
     shutil.copy(REPO / "map.html", root / "map.html")
-    for race in ("president", "senate", "governor"):
+    # map.html fetches this unconditionally on boot (not just when the House
+    # tab is opened - see start()), so every test needs it present, not only
+    # ones that exercise House.
+    shutil.copy(REPO / "districts-albers-10m.json", root / "districts-albers-10m.json")
+    for race in ("president", "senate", "governor", "house"):
         subprocess.run(
             [sys.executable, str(REPO / "generate_mock_data.py"), "--race", race, "--out-dir", str(root)],
             cwd=REPO, check=True, capture_output=True,

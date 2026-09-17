@@ -1,16 +1,21 @@
-"""Fetch county-level results from NBC News into raw_data[_<race>].csv.
+"""Fetch results from NBC News into raw_data[_<race>].csv.
 
-    python fetch_results.py --race president|senate|governor
+    python fetch_results.py --race president|senate|governor|house
 
-One HTTP call per state against NBC's results API (see nbc_api.py), which
-replaced a Selenium browser driving every state page - the old pipeline is
-kept in legacy/ as a fallback if NBC ever retires the API.
+One HTTP call per state against NBC's results API (see nbc_api.py) for
+president/senate/governor - which replaced a Selenium browser driving every
+state page, kept in legacy/ as a fallback if NBC ever retires the API. House
+is one HTTP call total: NBC's national House payload is already broken down
+by district, so there's no per-state loop for it (see
+nbc_api.house_results()).
 
 Each area's current vote share is extrapolated to 100% reporting
 (Predicted = Real x 100 / PercentIn). That is a per-area scalar, so it can
-never flip an area's own leader; the interesting case is a STATE whose leader
-flips once you add up areas that are reporting at different rates, which is
-what the map highlights.
+never flip an area's own leader; the interesting case is a STATE (or, for
+House, a DISTRICT) whose leader flips once you add up areas that are
+reporting at different rates, which is what the map highlights. House rows
+are districts, not counties, so that flip can only happen between districts
+today - see races.py for why a district-internal version of it is deferred.
 """
 
 import argparse
@@ -25,7 +30,7 @@ from pathlib import Path
 import requests
 
 import nbc_api
-from races import CSV_HEADER, RACES, race_files
+from races import CSV_HEADER, HOUSE_DISTRICTS, RACES, race_files
 
 
 def state_rows(payload):
@@ -51,7 +56,56 @@ def state_rows(payload):
     return rows
 
 
+def house_rows(districts):
+    """One CSV row per House district - no per-state or per-county loop.
+
+    Each row already *is* a full race (see nbc_api.house_results), unlike the
+    other three races where a row is one county and the map sums counties up
+    into a state. "State Total Expected" here is just that district's own
+    expected total, which is also why the map's per-state aggregation is a
+    no-op for House: grouping by district finds exactly one row.
+    """
+    rows = []
+    for district in districts:
+        percent_in = district["percent_in"]
+        if percent_in <= 0:
+            continue
+        info = HOUSE_DISTRICTS.get(district["geoid"])
+        if info is None:
+            # DC and Puerto Rico have a non-voting delegate race NBC may list
+            # here; they're not in HOUSE_DISTRICTS (no voting seat), so skip
+            # rather than paint a seat that doesn't exist.
+            continue
+        real = [district["by_party"].get("dem", 0), district["by_party"].get("gop", 0)]
+        rows.append(
+            [info["state"], info["label"], district["geoid"], "districts",
+             district["total_expected"], district["votes"], percent_in]
+            + real
+            + [round(v * 100 / percent_in) for v in real]
+            + [district["candidates"].get("dem", ""), district["candidates"].get("gop", "")]
+        )
+    return rows
+
+
+def fetch_house_race(cycle):
+    try:
+        districts, last_modified = nbc_api.house_results(cycle)
+    except requests.HTTPError as error:
+        status = error.response.status_code if error.response is not None else "?"
+        if status == 404:
+            sys.exit(f"No house results published for {cycle} yet (404). "
+                     f"Nothing to fetch; existing data is left alone.")
+        raise
+    return house_rows(districts), [], last_modified
+
+
 def fetch_race(race, cycle, skip, workers=8):
+    if race == "house":
+        # One national payload, not one request per state - see
+        # nbc_api.house_results(). --skip has no meaning here (there is no
+        # per-state fetch to skip) and is silently ignored.
+        return fetch_house_race(cycle)
+
     race_slug = RACES[race]["nbc_slug"]
     try:
         published = nbc_api.state_slugs(race_slug, cycle)

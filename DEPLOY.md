@@ -206,7 +206,7 @@ to paste all of them at once).
 | `DATA_DIR` | `/data` | Must equal the volume mount path. |
 | `REFRESH_SECONDS` | `900` | 15 min normally. Drop to `60` on election night. Floor is 30s. |
 | `NBC_CYCLE` | `2024` | `races.py` says 2026/2028 NBC paths 404 until results exist. Bump on election night. |
-| `RACES` | `president,senate,governor` | Or omit — the default is all three. |
+| `RACES` | `president,senate,governor` | Or omit — the default is all four (add `house` here too if you want it refreshed). |
 | `FETCH_TIMEOUT` | `300` | Hard kill per race. ~10s expected, so 300 is very generous. |
 
 **Do not set `PORT`.** Railway injects it, and `server.py` reads it. The

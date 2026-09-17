@@ -410,7 +410,7 @@
     /* Tabs get their own row; the two toggles share the next one. Stacking all
        three pushed the map 38px below the fold on a tablet. */
     .header-controls { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-    .tabs { display: grid; grid-template-columns: repeat(3, 1fr); flex: 1 1 100%; }
+    .tabs { display: grid; grid-template-columns: repeat(4, 1fr); flex: 1 1 100%; }
     .tabs button { padding: 0.4rem 0.3rem; }
     #palette-toggle { flex: 1 1 auto; justify-content: center; }
   }
@@ -530,7 +530,7 @@
   </div>
 
   <div class="card map-card">
-    <p class="map-hint">Click a state to drill down to its counties.
+    <p class="map-hint" id="map-hint"><span id="map-hint-click">Click a state to drill down to its counties.</span>
       <span class="hint-long"><span class="hint-plain">Muted colour means that region is still counting.</span><span class="hint-cvd" style="display:none">Solid means that region is done counting, hatched means it is still counting.</span></span></p>
     <svg id="map" class="loading" viewBox="0 0 975 610" role="img" aria-label="Map of the United States coloured by projected winner"></svg>
     <div id="loading" role="status">Loading map data&hellip;</div>
@@ -568,6 +568,11 @@
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 <script>
 const TOPOLOGY_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-albers-10m.json";
+// us-atlas ships counties and states only - no congressional-district layer
+// exists anywhere on npm/jsDelivr. This is a same-origin file built once by
+// build_district_topology.sh from the Census cd119 shapefile, reprojected
+// into the exact Albers USA us-atlas itself uses so the two line up.
+const DISTRICT_TOPOLOGY_URL = "districts-albers-10m.json";
 const CERTAIN_THRESHOLD = 95; // % reporting above which we call a race "certain" rather than "projected"
 const HATCH_PX = 5;           // hatch tile size, in screen pixels, for "projected" fills
 const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
@@ -617,7 +622,22 @@ const RACE_META = {
       "Texas", "Vermont", "Wisconsin", "Wyoming",
     ].map(s => [s, 1])),
   },
+  house: {
+    label: "House", unit: "seat", year: 2026, csv: "raw_data_house.csv",
+    winNote: "218 of 435 for control",
+    // Marks this race as keyed by district GEOID rather than by state name -
+    // every other function that branches on "is this House" checks this
+    // field rather than the race id, so a second district race would only
+    // need to set it too. All 435 seats are always in play, so unlike the
+    // other three races' hand-typed weights, this one is filled in from the
+    // district topology once it loads (see start()) rather than duplicated
+    // here - 435 GEOIDs is too much to hand-maintain twice.
+    geography: "districts",
+    weights: {},
+  },
 };
+
+const isDistrictRace = race => RACE_META[race].geography === "districts";
 
 // Which race a visitor lands on. The server injects window.__config from its
 // DEFAULT_RACE env var; served statically there is no config and we fall back,
@@ -715,7 +735,7 @@ function parseRaceCsv(text) {
 
 window.__mapTest.clampToViewport = clampToViewport;
 
-function buildRaceData(rows) {
+function buildRaceData(rows, race) {
   const dataByKey = new Map();
   const stateAggregates = new Map();
   // Every reporting area of a state, in order, whether or not it can be drawn.
@@ -723,13 +743,23 @@ function buildRaceData(rows) {
   // but they do have numbers, and the drill-down table can show them.
   const areasByState = new Map();
 
+  // For the three statewide races, "stateAggregates" really is one entry per
+  // state, built by summing every county row with the same State column - see
+  // the comment lower down. House has no county breakdown in this pass: NBC's
+  // national payload already hands us one row per district (see
+  // nbc_api.house_results()), so grouping has to key on the district's own
+  // GEOID instead - grouping by State here would silently merge every
+  // district of a state into one race, exactly the bug the county FIPS join
+  // already exists to avoid.
+  const groupKeyOf = row => (isDistrictRace(race) ? row["FIPS"] : normalize(row["State"]));
+
   for (const row of rows) {
     const percentIn = parseFloat(row["Percent In"]);
     const totalVotes = +row["Total Votes"];
     // "no data yet" placeholders, and any county with nothing counted.
     if (!percentIn || !totalVotes) continue;
 
-    const stateKey = normalize(row["State"]);
+    const stateKey = groupKeyOf(row);
     const area = {
       percentIn,
       demReal: +row["Democrat Real"],
@@ -822,9 +852,10 @@ if (typeof d3 === "undefined" || typeof topojson === "undefined") {
 } else {
   Promise.all([
     fetch(TOPOLOGY_URL).then(r => { if (!r.ok) throw new Error(`${r.status} fetching county boundaries`); return r.json(); }),
+    fetch(DISTRICT_TOPOLOGY_URL).then(r => { if (!r.ok) throw new Error(`${r.status} fetching district boundaries`); return r.json(); }),
     loadRace(DEFAULT_RACE),
   ])
-    .then(([topology, president]) => start(topology, president))
+    .then(([topology, districtTopology, defaultRaceData]) => start(topology, districtTopology, defaultRaceData))
     .catch(err => {
       console.error(err);
       showFatal(`Could not load map data (${err.message}). Serve this folder over HTTP and make sure the raw_data*.csv files sit next to map.html - run "python generate_mock_data.py --race president" to create them.`);
@@ -837,17 +868,17 @@ function loadRace(race) {
   return Promise.all([
     fetchText(RACE_META[race].csv),
     fetch(metaUrl(race)).then(r => (r.ok ? r.json() : null)).catch(() => null),
-  ]).then(([csvText, meta]) => ({ race, meta, ...buildRaceData(parseRaceCsv(csvText)) }));
+  ]).then(([csvText, meta]) => ({ race, meta, ...buildRaceData(parseRaceCsv(csvText), race) }));
 }
 
-function start(topology, president) {
+function start(topology, districtTopology, defaultRaceData) {
   // `current` holds whichever race's parsed data is active - swapped out by
   // switchRace() below; everything else (topology, DOM) is built once.
-  let current = president;
+  let current = defaultRaceData;
   let pendingRace = 0; // guards against a slow fetch landing after a newer one
 
   const stateStatus = stateKey => stateStatusFor(current, stateKey);
-  const hasRace = stateName => RACE_META[current.race].weights[stateName] !== undefined;
+  const hasRace = key => RACE_META[current.race].weights[key] !== undefined;
 
   const stateNameByFips = new Map(
     topology.objects.states.geometries.map(g => [g.id, g.properties.name])
@@ -859,6 +890,29 @@ function start(topology, president) {
   const allCounties = topojson.feature(topology, topology.objects.counties).features;
   const allStates = topojson.feature(topology, topology.objects.states).features;
   const statesMesh = topojson.mesh(topology, topology.objects.states, (a, b) => a !== b);
+
+  // Districts have no natural "name" the way a state does - the topology
+  // only carries "Congressional District N" plus the state's own FIPS (see
+  // build_district_topology.sh) - so build the map-unit key, aggregate-data
+  // key and display label for the current race's national units in one
+  // place, rather than re-deriving them at every call site.
+  const allDistricts = topojson.feature(districtTopology, districtTopology.objects.districts).features;
+  // Every district is always in play, and there are 435 of them - too many to
+  // hand-type like the other races' weights, so fill this in from the
+  // topology itself once, rather than shipping a second copy of the same list.
+  RACE_META.house.weights = Object.fromEntries(allDistricts.map(d => [d.id, 1]));
+
+  const nationalFeatures = () => (isDistrictRace(current.race) ? allDistricts : allStates);
+  // The key that RACE_META[race].weights and stateAggregates/areasByState are
+  // both keyed by for the current race: a state's own name for the three
+  // statewide races (weights) or its lower-cased form (aggregates, built by
+  // grouping CSV rows on the State column), a district's GEOID for House
+  // (both - see buildRaceData's groupKeyOf).
+  const weightKeyOf = feature => (isDistrictRace(current.race) ? feature.id : feature.properties.name);
+  const statusKeyOf = feature => (isDistrictRace(current.race) ? feature.id : normalize(feature.properties.name));
+  const labelOf = feature => (isDistrictRace(current.race)
+    ? `${stateNameByFips.get(feature.properties.state) || "?"} ${feature.properties.name}`
+    : feature.properties.name);
 
   const tooltip = d3.select("#tooltip");
   const nationalSvg = d3.select("#map");
@@ -914,8 +968,8 @@ function start(topology, president) {
     return COLORS.noData; // tie, or nothing resolved yet
   }
 
-  function stateFill(status, stateName, ns) {
-    if (!hasRace(stateName)) return `url(#hatch-none-${ns})`;
+  function stateFill(status, key, ns) {
+    if (!hasRace(key)) return `url(#hatch-none-${ns})`;
     if (!status) return COLORS.noData;
     return leaderFill(status.predictedLeader, status.certain, ns);
   }
@@ -964,8 +1018,8 @@ function start(topology, president) {
     };
   }
 
-  function stateSummary(stateName, status) {
-    if (!hasRace(stateName)) return `No ${RACE_META[current.race].label} race in ${RACE_META[current.race].year}`;
+  function stateSummary(key, status) {
+    if (!hasRace(key)) return `No ${RACE_META[current.race].label} race in ${RACE_META[current.race].year}`;
     if (!status) return "No data yet";
     if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, tied`;
     const leaderName = status.predictedLeader === "D" ? "Democrat" : "Republican";
@@ -1003,13 +1057,20 @@ function start(topology, president) {
       .on("mouseleave", hideTooltip);
   }
 
-  // ---------- national state-level view ----------
+  // ---------- national view (states for president/senate/governor, districts for House) ----------
   function renderNational() {
-    // selectAll("*").remove() destroys the focused state path, so remember
-    // which one it was and hand focus back after the redraw.
+    const districtRace = isDistrictRace(current.race);
+    const features = nationalFeatures();
+    // House has no drill-down in this pass (see labelOf/weightKeyOf comment
+    // above): each district IS the map unit, with no per-district county
+    // breakdown fetched yet, so there is nothing to open a panel onto.
+    const clickable = d => !districtRace && hasRace(weightKeyOf(d));
+
+    // selectAll("*").remove() destroys the focused path, so remember which
+    // unit it was and hand focus back after the redraw.
     const active = document.activeElement;
-    const focusedState = active && active.classList && active.classList.contains("state")
-      ? d3.select(active).datum().properties.name : null;
+    const focusedKey = active && active.classList && active.classList.contains("state")
+      ? weightKeyOf(d3.select(active).datum()) : null;
 
     nationalSvg.selectAll("*").remove();
     COLORS = snapshotColors();
@@ -1017,41 +1078,42 @@ function start(topology, president) {
 
     nationalSvg.append("g")
       .selectAll("path")
-      .data(allStates)
+      .data(features)
       .join("path")
-      .attr("class", d => "state" + (hasRace(d.properties.name) ? "" : " no-race"))
-      .attr("fill", d => stateFill(stateStatus(normalize(d.properties.name)), d.properties.name, "nat"))
+      .attr("class", d => "state" + (hasRace(weightKeyOf(d)) ? "" : " no-race"))
+      .attr("fill", d => stateFill(stateStatus(statusKeyOf(d)), weightKeyOf(d), "nat"))
       .attr("d", nationalPath)
-      .attr("tabindex", d => (hasRace(d.properties.name) ? 0 : null))
-      .attr("role", d => (hasRace(d.properties.name) ? "button" : null))
-      .attr("aria-label", d => `${d.properties.name}: ${stateSummary(d.properties.name, stateStatus(normalize(d.properties.name)))}`)
+      .attr("tabindex", d => (clickable(d) ? 0 : null))
+      .attr("role", d => (clickable(d) ? "button" : null))
+      .attr("aria-label", d => `${labelOf(d)}: ${stateSummary(weightKeyOf(d), stateStatus(statusKeyOf(d)))}`)
       .on("mousemove", (event, d) => {
-        showTooltip(event, `<strong>${d.properties.name}</strong><br>${stateSummary(d.properties.name, stateStatus(normalize(d.properties.name)))}`);
+        showTooltip(event, `<strong>${labelOf(d)}</strong><br>${stateSummary(weightKeyOf(d), stateStatus(statusKeyOf(d)))}`);
       })
       .on("mouseleave", hideTooltip)
-      .on("click", (event, d) => { if (hasRace(d.properties.name)) openStateOverlay(d); })
+      .on("click", (event, d) => { if (clickable(d)) openStateOverlay(d); })
       .on("keydown", (event, d) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
-        if (hasRace(d.properties.name)) openStateOverlay(d);
+        if (clickable(d)) openStateOverlay(d);
       });
 
+    // State borders give House viewers something to orient by even though
+    // the fills underneath are districts, not states.
     nationalSvg.append("path")
       .datum(statesMesh)
       .attr("class", "state-border")
       .attr("d", nationalPath);
 
-    const mismatched = allStates.filter(
-      d => hasRace(d.properties.name) && stateStatus(normalize(d.properties.name))?.mismatch);
+    const mismatched = features.filter(d => hasRace(weightKeyOf(d)) && stateStatus(statusKeyOf(d))?.mismatch);
     const group = nationalSvg.append("g");
     group.selectAll("path.mismatch-casing").data(mismatched).join("path")
       .attr("class", "mismatch-casing").attr("d", nationalPath);
     group.selectAll("path.mismatch-outline").data(mismatched).join("path")
       .attr("class", "mismatch-outline").attr("d", nationalPath);
 
-    if (focusedState) {
+    if (focusedKey) {
       const node = nationalSvg.selectAll("path.state")
-        .filter(d => d.properties.name === focusedState).node();
+        .filter(d => weightKeyOf(d) === focusedKey).node();
       if (node) node.focus();
     }
   }
@@ -1106,7 +1168,15 @@ function start(topology, president) {
 
     renderSubtitle();
     const meta = RACE_META[current.race];
-    nationalSvg.attr("aria-label", `Map of the United States coloured by projected ${meta.label} winner, ${meta.year}`);
+    const districtRace = isDistrictRace(current.race);
+    nationalSvg.attr("aria-label", districtRace
+      ? `Map of the United States coloured by projected winner in each of the 435 House districts, ${meta.year}`
+      : `Map of the United States coloured by projected ${meta.label} winner, ${meta.year}`);
+    // House has no per-district drill-down in this pass (see renderNational),
+    // so there is nothing to invite a click into.
+    d3.select("#map-hint-click").text(districtRace
+      ? "Each district is coloured by its own projected winner."
+      : "Click a state to drill down to its counties.");
   }
 
   // Say plainly what is on screen. The awkward case is real results from a

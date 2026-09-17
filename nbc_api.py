@@ -18,6 +18,11 @@ report by township, Rhode Island by municipality, Alaska by legislative
 district and DC by ward. Those eight have no county-level numbers at all, so
 the honest thing is to say so rather than paint a county with one town's
 votes. `payload["geography"]` tells us which case we are in.
+
+HOUSE IS DIFFERENT: the national-results payload for "house" already breaks
+the country down by district (`mapData`, keyed by district GEOID) rather than
+by state, so `house_results()` needs none of `state_results()`'s per-state
+fetch loop - see that function for why.
 """
 
 import json
@@ -39,6 +44,24 @@ COUNTY_GEOGRAPHIES = {"counties", "parishes"}
 # build_fips_table.py; see that script for why this is a table and not a
 # name match done at runtime.
 FIPS_TABLE = json.loads((Path(__file__).parent / "county_fips.json").read_text(encoding="utf-8"))
+
+# (district GEOID) -> {state, label}. Built once by build_district_topology.sh
+# from the Census shapefile - see that script. Used here only to fix up NBC's
+# at-large district numbering (see _fix_at_large_geoid below).
+_HOUSE_DISTRICTS = json.loads((Path(__file__).parent / "house_districts.json").read_text(encoding="utf-8"))
+
+# The Census GEOID standard - what the district topology and house_districts
+# table both use - numbers an at-large state's lone district "00". NBC's own
+# API instead calls it "District 1" and keys it "...01" (checked live for all
+# six current at-large states: AK, DE, MT is NOT at-large post-2020 so it's
+# unaffected, ND, SD, VT, WY). Left alone, that mismatch would silently fail
+# to join those six states to the map - so rewrite "01" back to the standard
+# "00" for any state that this cycle's topology says only has one district.
+_AT_LARGE_STATE_FIPS = {geoid[:2] for geoid in _HOUSE_DISTRICTS if geoid.endswith("00")}
+
+
+def _fix_at_large_geoid(geoid):
+    return geoid[:2] + "00" if geoid[:2] in _AT_LARGE_STATE_FIPS else geoid
 
 
 def _get(url):
@@ -118,11 +141,52 @@ def state_results(state_slug, race_slug, cycle):
     }
 
 
+def house_results(cycle):
+    """Every U.S. House district's results, normalised, in one call.
+
+    Unlike president/senate/governor, NBC already breaks the House down to
+    one race per district in a single national payload
+    (`mapData`, keyed by the standard 4-digit district GEOID - state FIPS +
+    2-digit district number, "00" for an at-large seat) - so there is no
+    per-state fetch loop here the way there is in `state_results()`.
+    """
+    payload = _get(f"{BASE_URL}/national-results/{cycle}-elections/house-results")
+    map_data = payload.get("mapData") or {}
+
+    districts = []
+    for geoid, entry in map_data.items():
+        tooltip = entry.get("tooltip") or {}
+        candidates = tooltip.get("candidates") or []
+        votes = int(tooltip.get("totalVote") or 0)
+        districts.append({
+            "geoid": _fix_at_large_geoid(geoid),
+            "race_name": tooltip.get("raceName") or geoid,
+            "percent_in": float(tooltip.get("percentIn") or 0),
+            "votes": votes,
+            "total_expected": votes + int(tooltip.get("remainingVote") or 0),
+            "by_party": _votes_by_party(candidates),
+            "candidates": _leading_by_party(candidates),
+        })
+    return districts, payload.get("lastModified")
+
+
+# The House's national payload tags the Republican candidate's party "Rep"
+# (Title case); every other endpoint here already calls it "gop" (see
+# state_results() above). Normalise both to lower case so downstream code
+# only ever has to check one spelling.
+_PARTY_ALIASES = {"rep": "gop"}
+
+
+def _party_code(candidate):
+    code = (candidate.get("party") or "").lower()
+    return _PARTY_ALIASES.get(code, code)
+
+
 def _votes_by_party(candidates):
     """Votes keyed by NBC's party code ("dem" / "gop" / "other" / ...)."""
     totals = {}
     for candidate in candidates:
-        party = candidate.get("party")
+        party = _party_code(candidate)
         totals[party] = totals.get(party, 0) + int(candidate.get("votes") or 0)
     return totals
 
@@ -136,7 +200,7 @@ def _leading_by_party(candidates):
     """
     best = {}
     for candidate in candidates:
-        party = candidate.get("party")
+        party = _party_code(candidate)
         votes = int(candidate.get("votes") or 0)
         if party not in best or votes > best[party][1]:
             best[party] = (candidate.get("name", ""), votes)

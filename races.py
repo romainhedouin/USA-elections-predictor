@@ -5,9 +5,16 @@ president, Senate, and governor pages all share the same
 data-testid="county-row" structure and {race}-results-* element ids (just
 "president"/"senate"/"governor" swapped in) - confirmed by inspecting both
 the presidential pages and archived 2024 Senate/governor results pages
-directly. House is not included: its 435 districts need per-district
-boundaries and 435 pages to scrape, a different shape of problem than these
-three statewide races.
+directly.
+
+House is a different shape: 435 single-seat districts, all always in play,
+rather than a subset of 50 states. It is scraped and rendered differently
+(one national payload, already broken down by district - see
+nbc_api.house_results() - joined against district boundaries instead of
+county boundaries) but shares the same CSV schema and extrapolation math as
+the other three. This pass covers district-level results only; a
+per-district county drill-down (mirroring the state -> county drill-down the
+other races have) would need ~435 more page fetches and is deferred.
 
 Two different years matter, and conflating them was a real bug:
   - `election_year` is the election we are REPORTING ON. It is what the UI
@@ -23,6 +30,7 @@ states are actually in play this cycle" - most states have no Senate or
 governor race in any given cycle.
 """
 
+import json
 from pathlib import Path
 
 # 2020-census apportionment, effective for the 2024 and 2028 presidential
@@ -70,6 +78,12 @@ GOVERNOR_STATES_2026 = [
     "Wisconsin", "Wyoming",
 ]
 
+# (district GEOID) -> {"state": ..., "label": ...}. Built once by
+# build_district_topology.sh from the same Census shapefile the district map
+# boundaries come from, so the two can never disagree about which 435
+# districts exist.
+HOUSE_DISTRICTS = json.loads((Path(__file__).parent / "house_districts.json").read_text(encoding="utf-8"))
+
 # Sanity-check the hand-maintained tables: right totals, no duplicates, and
 # every state spelled the way ELECTORAL_VOTES (and therefore the map's
 # topology join) spells it.
@@ -78,6 +92,7 @@ for _states, _expected in ((SENATE_STATES_2026, 35), (GOVERNOR_STATES_2026, 36))
     assert len(_states) == _expected, f"expected {_expected} states, got {len(_states)}"
     assert len(set(_states)) == len(_states), "duplicate state"
     assert set(_states) <= set(ELECTORAL_VOTES), f"unknown state name: {set(_states) - set(ELECTORAL_VOTES)}"
+assert len(HOUSE_DISTRICTS) == 435, f"expected 435 House districts, got {len(HOUSE_DISTRICTS)}"
 
 RACES = {
     "president": {
@@ -106,6 +121,18 @@ RACES = {
         "nbc_cycle": "2024",    # /politics/2026-elections/governor-results is a 404 today
         "hub_h2": "All Governor races",
         "weights": {state: 1 for state in GOVERNOR_STATES_2026},
+    },
+    "house": {
+        "label": "House",
+        "unit": "seat",
+        "nbc_slug": "house",
+        "election_year": 2026,  # Tue 3 Nov 2026
+        "nbc_cycle": "2024",    # /politics/2026-elections/house-results is a 404 today
+        "hub_h2": "All House races",
+        # Every one of the 435 seats is up every cycle, keyed by district
+        # GEOID rather than state name - a different key space than the other
+        # three races' weights, which map.html has to know about.
+        "weights": {geoid: 1 for geoid in HOUSE_DISTRICTS},
     },
 }
 

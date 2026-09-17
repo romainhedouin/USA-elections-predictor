@@ -1,9 +1,10 @@
 # USA Election Live Predictor 2028
 
-Scrapes live, county-level results from NBC News — president, Senate or
-governor — and extrapolates each county's current vote share out to 100%
-reporting, to get an early read on where a state is heading before all votes
-are counted. `map.html` renders the result as a clickable county map.
+Scrapes live results from NBC News — president, Senate, governor or House —
+and extrapolates each reporting area's current vote share out to 100%
+reporting, to get an early read on where a race is heading before all votes
+are counted. `map.html` renders president/Senate/governor as a clickable
+county map; House renders as a district map (see "House is different" below).
 
 ## How the prediction works
 
@@ -23,8 +24,9 @@ that are reporting at different rates.
 ## Requirements
 
 - Python 3.9+ and `pip install -r requirements.txt` (just `requests`)
-- Network access for `map.html`'s three jsDelivr assets (d3, topojson-client,
-  and the us-atlas county boundaries)
+- Network access for `map.html`'s jsDelivr assets (d3, topojson-client, and
+  the us-atlas county boundaries) plus the same-origin `districts-albers-10m.json`
+  (checked in - see "House is different")
 
 Google Chrome and the extra packages in `legacy/requirements.txt` are only
 needed for the superseded scraper in that folder.
@@ -33,12 +35,12 @@ needed for the superseded scraper in that folder.
 
 Everything comes from NBC News' election-night results pages,
 `nbcnews.com/politics/<year>-elections/...`. `races.py` is the config for all
-three race types and splits two years that are easy to confuse:
+four race types and splits two years that are easy to confuse:
 
 - `election_year` — the election being reported on (2028 president, 2026
   midterms). This is what the UI displays.
 - `nbc_cycle` — the year in NBC's URL path. NBC only mints a path once
-  results exist, so today all three races point at `"2024"`; the 2026 and
+  results exist, so today all four races point at `"2024"`; the 2026 and
   2028 paths are 404s. Bump `nbc_cycle` on election night (or override it
   per-run with `--nbc-cycle`).
 
@@ -49,14 +51,16 @@ can change their markup.
 
 ```
 pip install -r requirements.txt
-python fetch_results.py --race president     # or senate / governor
+python fetch_results.py --race president     # or senate / governor / house
 ```
 
-That's the whole thing — about ten seconds for all 51 states. It writes
-`raw_data.csv` (president) or `raw_data_<race>.csv`, one row per reporting
-area, plus a `.meta.json` sidecar recording where the numbers came from and
-when. Flags: `--nbc-cycle 2024` to override the year, `--skip alaska,hawaii`,
-`--out-dir` to write elsewhere.
+That's the whole thing — about ten seconds for all 51 states (president/
+senate/governor) or a couple of seconds for House (one national request - see
+"House is different"). It writes `raw_data.csv` (president) or
+`raw_data_<race>.csv`, one row per reporting area, plus a `.meta.json` sidecar
+recording where the numbers came from and when. Flags: `--nbc-cycle 2024` to
+override the year, `--skip alaska,hawaii` (ignored for House, which has no
+per-state fetch to skip), `--out-dir` to write elsewhere.
 
 The results pages are a Next.js app that calls an unauthenticated JSON API,
 so `nbc_api.py` calls it directly instead of driving a browser. That is ~25×
@@ -89,6 +93,34 @@ municipality, Alaska by legislative district, DC by ward. Their state colour
 and totals are correct; their drill-down says so rather than inventing a
 county breakdown.
 
+### House is different
+
+The House is 435 single-seat districts rather than a subset of 50 states, and
+NBC already reports it that way: one national payload
+(`nbc_api.house_results()`) hands back every district's results in a single
+request, so there's no per-state fetch loop the way there is for the other
+three races. Each row in `raw_data_house.csv` is a whole district, not a
+county - so unlike the other races, **the map's per-district "mismatch"
+outline can never trigger in this pass**: that outline only shows up once you
+aggregate sub-units reporting at different rates, and a district row has no
+county breakdown under it yet. A per-district county drill-down (matching the
+state → county one the other three races have) is future work; it would need
+NBC's per-district page for all 435 seats, roughly 14× the requests this pass
+makes.
+
+`us-atlas` (the CDN package the county/state map uses) has no congressional-
+district layer, and none exists anywhere on npm or jsDelivr, so
+`districts-albers-10m.json` is a same-origin file built once by
+`build_district_topology.sh` from the Census Bureau's `cb_2024_us_cd119`
+shapefile, reprojected into the exact Albers USA `us-atlas` itself uses so the
+two line up. It's checked into the repo like `county_fips.json` is; re-run the
+script after the next redistricting (the 119th Congress's lines hold through
+the 2026 midterms). `house_districts.json`, a GEOID → state/label table built
+by the same script, is `races.py`'s source for `HOUSE_DISTRICTS` - and also
+fixes a real NBC quirk: NBC numbers an at-large state's lone district "01"
+where the Census GEOID standard (and this map) uses "00" - see
+`nbc_api._fix_at_large_geoid`.
+
 ## Trying it without scraping
 
 `python generate_mock_data.py [--race ...]` writes a fictional CSV (see "How
@@ -97,7 +129,9 @@ marks it as mock, and the page shows a "Demo data" badge accordingly. It covers 
 where the projected winner matches the raw leader — both nearly-counted
 ("certain") and barely-counted ("projected"), for both parties — and two
 states where they disagree. Every other in-play state gets a "no data yet"
-placeholder.
+placeholder. House mock data covers the same "certain"/"projected" match cases
+per district, real GEOIDs and all, but has no mismatch case - see "House is
+different" above for why one row can't produce one.
 
 The CSVs are gitignored, so run it once per race before opening the map:
 
@@ -105,6 +139,7 @@ The CSVs are gitignored, so run it once per race before opening the map:
 python generate_mock_data.py --race president
 python generate_mock_data.py --race senate
 python generate_mock_data.py --race governor
+python generate_mock_data.py --race house
 ```
 
 ## Map
@@ -125,18 +160,21 @@ python3 -m http.server
 then visit `http://localhost:8000/map.html` (opening the file directly won't
 work — `fetch` needs HTTP).
 
-It opens on a national, state-level map with President / Senate / Governor
-tabs; click or tab-and-Enter a state to drill into its counties. It re-pulls
-the active race once a minute, and the subtitle says what is on screen and how
-old it is. Solid fill
-means that region's own count is effectively done, a hatch means it's still
-counting, grey means no data yet, and a dashed outline marks a state where
-the raw leader disagrees with the extrapolated winner. The scoreboard totals
-electoral votes or seats, split certain vs projected.
+It opens on a national, state-level map with President / Senate / Governor /
+House tabs; click or tab-and-Enter a state to drill into its counties (House
+has no drill-down yet - see "House is different"). It re-pulls the active
+race once a minute, and the subtitle says what is on screen and how old it
+is. Solid fill means that region's own count is effectively done, a hatch
+means it's still counting, grey means no data yet, and a dashed outline marks
+a state (or, for the other three races, a district) where the raw leader
+disagrees with the extrapolated winner. The scoreboard totals electoral
+votes or seats, split certain vs projected.
 
 `RACE_META` in `map.html` mirrors `races.py`'s weight tables by hand, since
-the page is deliberately a single static file with no build step. If you edit
-one, edit the other.
+the page is deliberately a single static file with no build step - except
+House's, which is 435 entries and gets filled in from the district topology
+at load time instead (see `start()`). If you edit `races.py`'s weight tables,
+edit `RACE_META` to match.
 
 That's it, unless I forgot something or NBC's website has changed, in which
 case good luck!
@@ -145,10 +183,11 @@ case good luck!
 
 | | |
 |---|---|
-| `races.py` | race config: electoral votes, which states are in play, and the two different years (`election_year` vs `nbc_cycle`) |
+| `races.py` | race config: electoral votes, which states are in play, House's 435 districts, and the two different years (`election_year` vs `nbc_cycle`) |
 | `nbc_api.py` | client for NBC's results API |
 | `fetch_results.py` | the pipeline: API → `raw_data[_<race>].csv` |
 | `build_fips_table.py` | regenerates `county_fips.json` (rarely) |
+| `build_district_topology.sh` | regenerates `districts-albers-10m.json` and `house_districts.json` (rarely - see "House is different") |
 | `generate_mock_data.py` | fictional fixtures with the same schema |
 | `map.html` | the whole UI, one static file |
 | `legacy/` | the superseded Selenium scraper, kept as a fallback |
@@ -171,7 +210,7 @@ then fetches live results for whichever races `RACES` names.
 | Variable | Default | |
 |---|---|---|
 | `DATA_DIR` | `./data` | where the CSVs live (a mounted volume in production) |
-| `RACES` | all three | which races get *refreshed*. All three are always served and always seeded — this only controls fetching |
+| `RACES` | all four | which races get *refreshed*. All four are always served and always seeded — this only controls fetching |
 | `DEFAULT_RACE` | `president` | which race a visitor **lands on**. Unrelated to `RACES` |
 | `REFRESH_SECONDS` | `900` | 60 on election night; floor is 30 |
 | `REFRESH_ENABLED` | `1` | `0` pauses fetching entirely; the site stays up serving what it has |
