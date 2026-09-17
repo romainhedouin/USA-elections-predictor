@@ -110,11 +110,19 @@ RACES = {
 }
 
 
-# The CSV schema every producer writes and map.html reads. Party columns are
-# fixed regardless of who is running - NBC tags each candidate row with its
-# party, so the scraper can resolve it - with the real names carried alongside.
+# The CSV schema every producer writes and map.html reads.
+#
+# Party columns are fixed regardless of who is running - NBC tags every
+# candidate with a party - with the real names carried alongside.
+#
+# "Area" rather than "County" because NBC does not report every state by
+# county: eight report by township, municipality, ward or legislative
+# district. FIPS is the county code where one applies and empty where one does
+# not, and Geography says which case a row is, so the map can join exactly
+# instead of guessing from names and can be honest about the states it cannot
+# break down.
 CSV_HEADER = [
-    "State", "County", "State Total Expected", "Total Votes", "Percent In",
+    "State", "Area", "FIPS", "Geography", "State Total Expected", "Total Votes", "Percent In",
     "Democrat Real", "Republican Real", "Democrat Predicted", "Republican Predicted",
     "Democrat Name", "Republican Name",
 ]

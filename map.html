@@ -120,6 +120,12 @@
   header .titles { min-width: 0; }
   header h1 { font-size: clamp(1.15rem, 1rem + 1.2vw, 1.55rem); margin: 0 0 0.2rem; letter-spacing: -0.01em; }
   header p.subtitle { margin: 0; color: var(--muted); font-size: 0.9rem; }
+  .badge {
+    display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em;
+    text-transform: uppercase; padding: 0.15rem 0.45rem; border-radius: 5px; margin-right: 0.45rem;
+    background: var(--chip); color: var(--muted); vertical-align: 1px;
+  }
+  .badge.demo { background: var(--mismatch); color: var(--mismatch-casing); }
 
   .tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .tabs button {
@@ -379,8 +385,8 @@
 <script>
 const TOPOLOGY_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-albers-10m.json";
 const CERTAIN_THRESHOLD = 95; // % reporting above which we call a race "certain" rather than "projected"
-const DEMO_DATA = true;       // flip to false once the CSVs come from a real scrape
 const HATCH_PX = 5;           // hatch tile size, in screen pixels, for "projected" fills
+const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
 
 // Mirrors races.py - president uses electoral votes, Senate/governor use one
 // seat per in-play state. `year` is the election being reported on, which is
@@ -454,6 +460,25 @@ function leaderOf(dem, rep) {
   return "tie";
 }
 
+// Each CSV has a sibling .meta.json saying where the numbers came from and
+// when. Without it the page cannot tell real results from the mock fixtures,
+// and cannot say how stale it is - both of which matter once this is public.
+function metaUrl(race) {
+  return RACE_META[race].csv.replace(/\.csv$/, ".meta.json");
+}
+
+function describeAge(iso) {
+  if (!iso) return "";
+  const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  if (seconds < 90) return "updated just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `updated ${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return `updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  return `updated ${Math.round(hours / 24)} days ago`;
+}
+
 function parseRaceCsv(text) {
   const rows = d3.dsvFormat(";").parse(text);
   if (!rows.columns || !rows.columns.includes("Percent In")) {
@@ -473,7 +498,7 @@ function buildRaceData(rows) {
     if (!percentIn || !totalVotes) continue;
 
     const stateKey = normalize(row["State"]);
-    const county = {
+    const area = {
       percentIn,
       demReal: +row["Democrat Real"],
       repReal: +row["Republican Real"],
@@ -482,7 +507,13 @@ function buildRaceData(rows) {
       demName: row["Democrat Name"] || "Democrat",
       repName: row["Republican Name"] || "Republican",
     };
-    dataByKey.set(stateKey + "|" + normalize(row["County"]), county);
+    // Keyed by county FIPS, which is exactly the id us-atlas gives its county
+    // shapes. Matching on names instead used to paint 10 states wrong - a New
+    // England county coloured from the one town that shares its name, and
+    // Brooklyn/Baltimore City/Fairfax City silently dropped or doubled.
+    // Rows with no FIPS are states NBC reports below county level; they still
+    // count towards the state aggregate, they just have nothing to draw.
+    if (row["FIPS"]) dataByKey.set(row["FIPS"], area);
 
     // A single county's raw leader and predicted leader can never actually
     // differ - Predicted is just Real scaled by a constant (100/PercentIn),
@@ -491,16 +522,17 @@ function buildRaceData(rows) {
     // reporting at different rates, so mismatch/certainty is computed per
     // STATE, aggregating every populated county row in that state.
     const agg = stateAggregates.get(stateKey)
-      || { totalExpected: 0, totalVotes: 0, demReal: 0, repReal: 0, demPredicted: 0, repPredicted: 0 };
+      || { totalExpected: 0, totalVotes: 0, demReal: 0, repReal: 0, demPredicted: 0, repPredicted: 0,
+            geography: row["Geography"] || "counties" };
     // State-wide and identical on every row of the state, so take it once
     // rather than summing - summing divided the real reporting percentage by
     // the county count, and no state ever reached "certain".
     agg.totalExpected = Math.max(agg.totalExpected, +row["State Total Expected"] || 0);
     agg.totalVotes += totalVotes;
-    agg.demReal += county.demReal;
-    agg.repReal += county.repReal;
-    agg.demPredicted += county.demPredicted;
-    agg.repPredicted += county.repPredicted;
+    agg.demReal += area.demReal;
+    agg.repReal += area.repReal;
+    agg.demPredicted += area.demPredicted;
+    agg.repPredicted += area.repPredicted;
     stateAggregates.set(stateKey, agg);
   }
 
@@ -515,6 +547,10 @@ function stateStatusFor(current, stateKey) {
   const percentIn = agg.totalExpected > 0 ? (agg.totalVotes / agg.totalExpected) * 100 : 0;
   return {
     predictedLeader,
+    geography: agg.geography,
+    // NBC reports eight states by township, municipality, ward or legislative
+    // district. Their state totals are fine; they simply have no county split.
+    countyLevel: agg.geography === "counties" || agg.geography === "parishes",
     // A tie is not a flip: with nothing resolved on one side there is nothing
     // for the extrapolation to disagree with.
     mismatch: rawLeader !== "tie" && predictedLeader !== "tie" && rawLeader !== predictedLeader,
@@ -550,19 +586,28 @@ if (typeof d3 === "undefined" || typeof topojson === "undefined") {
 } else {
   Promise.all([
     fetch(TOPOLOGY_URL).then(r => { if (!r.ok) throw new Error(`${r.status} fetching county boundaries`); return r.json(); }),
-    fetchText(RACE_META.president.csv),
+    loadRace("president"),
   ])
-    .then(([topology, presidentCsvText]) => start(topology, presidentCsvText))
+    .then(([topology, president]) => start(topology, president))
     .catch(err => {
       console.error(err);
       showFatal(`Could not load map data (${err.message}). Serve this folder over HTTP and make sure the raw_data*.csv files sit next to map.html - run "python generate_mock_data.py --race president" to create them.`);
     });
 }
 
-function start(topology, presidentCsvText) {
+// A race's CSV plus its metadata sidecar. The sidecar is optional: an older
+// pipeline, or a hand-made CSV, should still render.
+function loadRace(race) {
+  return Promise.all([
+    fetchText(RACE_META[race].csv),
+    fetch(metaUrl(race)).then(r => (r.ok ? r.json() : null)).catch(() => null),
+  ]).then(([csvText, meta]) => ({ race, meta, ...buildRaceData(parseRaceCsv(csvText)) }));
+}
+
+function start(topology, president) {
   // `current` holds whichever race's parsed data is active - swapped out by
   // switchRace() below; everything else (topology, DOM) is built once.
-  let current = { race: "president", ...buildRaceData(parseRaceCsv(presidentCsvText)) };
+  let current = president;
   let pendingRace = 0; // guards against a slow fetch landing after a newer one
 
   const stateStatus = stateKey => stateStatusFor(current, stateKey);
@@ -667,8 +712,11 @@ function start(topology, presidentCsvText) {
 
   function countyInfo(feature) {
     const stateName = stateNameByFips.get(feature.id.slice(0, 2));
-    const stateKey = normalize(stateName || "");
-    return { stateName, stateKey, data: current.dataByKey.get(stateKey + "|" + normalize(feature.properties.name)) };
+    return {
+      stateName,
+      stateKey: normalize(stateName || ""),
+      data: current.dataByKey.get(feature.id), // feature.id IS the county FIPS
+    };
   }
 
   function stateSummary(stateName, status) {
@@ -693,7 +741,10 @@ function start(topology, presidentCsvText) {
         const { stateName, stateKey, data } = countyInfo(d);
         let html = `<strong>${d.properties.name}, ${stateName || "?"}</strong><br>`;
         if (!data) {
-          html += "No data yet";
+          const status = stateStatus(stateKey);
+          html += status && !status.countyLevel
+            ? `Reported by ${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}, not by county`
+            : "No data yet";
         } else {
           const nameOf = leader => (leader === "D" ? data.demName : leader === "R" ? data.repName : "Nobody");
           html += `${+data.percentIn.toFixed(1)}% in &middot; ${data.percentIn >= CERTAIN_THRESHOLD ? "done counting" : "still counting"}<br>`
@@ -807,11 +858,39 @@ function start(topology, presidentCsvText) {
       .html(race => `<span>${RACE_META[race].label}</span><span class="tab-year">${RACE_META[race].year}</span>`)
       .on("click", (event, race) => switchRace(race));
 
+    renderSubtitle();
     const meta = RACE_META[current.race];
-    d3.select("#subtitle").text(
-      `${DEMO_DATA ? "Demo data" : "NBC News data"} · ${meta.label} ${meta.year} · county results extrapolated to full reporting`
-    );
     nationalSvg.attr("aria-label", `Map of the United States coloured by projected ${meta.label} winner, ${meta.year}`);
+  }
+
+  // Say plainly what is on screen. The awkward case is real results from a
+  // cycle other than the one the tab names - NBC only publishes a cycle once
+  // it has results, so a 2028 tab can only ever show older real numbers until
+  // election night.
+  function renderSubtitle() {
+    const meta = RACE_META[current.race];
+    const info = current.meta;
+    const parts = [];
+    let badge = "";
+
+    if (!info) {
+      parts.push(`${meta.label} ${meta.year}`);
+    } else if (info.source === "mock") {
+      badge = '<span class="badge demo">Demo data</span>';
+      parts.push(`Illustrative ${meta.label} ${meta.year} figures — no votes have been cast`);
+    } else if (String(info.nbcCycle) !== String(info.electionYear)) {
+      badge = '<span class="badge">NBC News</span>';
+      parts.push(`${info.nbcCycle} ${meta.label} results — live ${info.electionYear} coverage starts when NBC publishes it`);
+    } else {
+      badge = '<span class="badge">NBC News</span>';
+      parts.push(`${meta.label} ${info.electionYear} results`);
+    }
+    if (info) {
+      const age = describeAge(info.fetchedAt);
+      if (age) parts.push(age);
+    }
+    parts.push("county results extrapolated to full reporting");
+    d3.select("#subtitle").html(badge + parts.join(" · "));
   }
 
   function switchRace(race) {
@@ -819,10 +898,10 @@ function start(topology, presidentCsvText) {
     // already in flight, not just decline to start a second request.
     const token = ++pendingRace;
     if (race === current.race) return;
-    fetchText(RACE_META[race].csv)
-      .then(csvText => {
+    loadRace(race)
+      .then(loaded => {
         if (token !== pendingRace) return; // a newer tab click already won
-        current = { race, ...buildRaceData(parseRaceCsv(csvText)) };
+        current = loaded;
         closeOverlay({ restoreFocus: false }); // renderNational() is about to delete that node
         renderRaceTabs();
         renderNational();
@@ -864,9 +943,13 @@ function start(topology, presidentCsvText) {
     d3.select("#overlay-panel").style("--vb-ratio", vbWidth / vbHeight);
 
     const status = stateStatus(normalize(stateName));
+    const note = status && !status.countyLevel
+      ? `${stateSummary(stateName, status)} — NBC reports this state by `
+        + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}, so there is no county breakdown.`
+      : stateSummary(stateName, status);
     d3.select("#overlay-title").text(stateName);
-    d3.select("#overlay-note").text(stateSummary(stateName, status));
-    stateSvg.attr("aria-label", `${stateName} counties: ${stateSummary(stateName, status)}`);
+    d3.select("#overlay-note").text(note);
+    stateSvg.attr("aria-label", `${stateName} counties: ${note}`);
 
     lastFocused = document.activeElement;
     openStateFeature = stateFeature;
@@ -950,6 +1033,24 @@ function start(topology, presidentCsvText) {
   });
   window.matchMedia("(prefers-color-scheme: dark)")
     .addEventListener("change", () => { redrawAll(); renderScoreboard(); });
+
+  // Re-pull the active race on a timer, so a deployed page keeps up with the
+  // count without anyone reloading. Skip the redraw when nothing changed:
+  // re-rendering steals keyboard focus and closes nothing gracefully.
+  setInterval(() => {
+    const race = current.race;
+    loadRace(race)
+      .then(loaded => {
+        if (race !== current.race) return; // the user switched mid-flight
+        const unchanged = current.meta && loaded.meta && current.meta.fetchedAt === loaded.meta.fetchedAt;
+        current = loaded;
+        if (unchanged) { renderSubtitle(); return; } // just age the timestamp
+        renderRaceTabs();
+        redrawAll();
+        renderScoreboard();
+      })
+      .catch(err => console.warn("refresh failed, keeping current data", err));
+  }, REFRESH_SECONDS * 1000);
 
   renderRaceTabs();
   renderNational();

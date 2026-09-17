@@ -23,9 +23,10 @@ that are reporting at different rates.
 ## Requirements
 
 - Python 3.9+ and `pip install -r requirements.txt`
-- Google Chrome installed (Selenium 4 resolves its own chromedriver)
 - Network access for `map.html`'s three jsDelivr assets (d3, topojson-client,
   and the us-atlas county boundaries)
+
+Google Chrome is only needed for the superseded scraper in `legacy/`.
 
 ## Data source
 
@@ -45,33 +46,53 @@ can change their markup.
 
 ## Pipeline
 
-1. `pip install -r requirements.txt`
-2. `python list_states.py [--race president|senate|governor]` — scrapes NBC's
-   results hub page for the list of per-state result pages, saved to
-   `nbc_states.json` (president) or `nbc_states_<race>.json`.
-3. `python generate_raw_data.py [--race ...]` — for each state:
-   - drives headless Chrome via Selenium to load the state's results page
-     (the county table is JS-rendered) and saves each county row's raw HTML
-     under `states/<race>/<state>/raw_div.txt`;
-   - parses that raw HTML into `raw_data.csv` / `raw_data_<race>.csv`, one
-     row per county, with real vote counts plus a "predicted" final count per
-     party (extrapolating the current vote share to 100% reporting).
+```
+pip install -r requirements.txt
+python fetch_results.py --race president     # or senate / governor
+```
 
-   Useful flags: `--no-grab` reprocesses already-saved `states/` data without
-   touching the network (handy while iterating on the parsing logic);
-   `--skip alaska,hawaii` resumes a partial run; `--show-browser` runs Chrome
-   visibly.
+That's the whole thing — about ten seconds for all 51 states. It writes
+`raw_data.csv` (president) or `raw_data_<race>.csv`, one row per reporting
+area, plus a `.meta.json` sidecar recording where the numbers came from and
+when. Flags: `--nbc-cycle 2024` to override the year, `--skip alaska,hawaii`,
+`--out-dir` to write elsewhere.
 
-NBC tags every candidate row with its party, so the CSV columns are always
+The results pages are a Next.js app that calls an unauthenticated JSON API,
+so `nbc_api.py` calls it directly instead of driving a browser. That is ~25×
+faster than the old Selenium scraper, and it hands over party codes and county
+FIPS as structured fields rather than things to infer from markup. The old
+scraper is kept in `legacy/` in case NBC ever retires the API.
+
+NBC tags every candidate with a party, so the CSV columns are always
 `Democrat`/`Republican` regardless of who's running — the candidates' actual
 names ride along in the trailing `Democrat Name` / `Republican Name` columns.
 `State Total Expected` is NBC's state-wide estimate of final turnout, which
 they only publish per state, so it's repeated on every row of that state.
 
+### Counties, and the eight states that don't have them
+
+Rows carry a 5-digit county `FIPS`, which is exactly the id `us-atlas` gives
+its county shapes — so the map joins on it instead of matching names. That
+matters: name matching silently painted ten states wrong, because NBC calls
+Kings County "Brooklyn", and because a New England *town* often shares its
+name with a county it is not in.
+
+NBC's API doesn't attach a name to its FIPS keys, so `county_fips.json` is a
+lookup table built once by `build_fips_table.py` against a settled cycle,
+where per-county vote totals identify each county unambiguously. Read that
+script's docstring before regenerating it.
+
+Eight states have no county-level numbers at all: Connecticut, Maine,
+Massachusetts, New Hampshire and Vermont report by township, Rhode Island by
+municipality, Alaska by legislative district, DC by ward. Their state colour
+and totals are correct; their drill-down says so rather than inventing a
+county breakdown.
+
 ## Trying it without scraping
 
 `python generate_mock_data.py [--race ...]` writes a fictional CSV (see "How
-the prediction works" above) without touching NBC at all. It covers states
+the prediction works" above) without touching NBC at all. Its metadata sidecar
+marks it as mock, and the page shows a "Demo data" badge accordingly. It covers states
 where the projected winner matches the raw leader — both nearly-counted
 ("certain") and barely-counted ("projected"), for both parties — and two
 states where they disagree. Every other in-play state gets a "no data yet"
@@ -104,7 +125,9 @@ then visit `http://localhost:8000/map.html` (opening the file directly won't
 work — `fetch` needs HTTP).
 
 It opens on a national, state-level map with President / Senate / Governor
-tabs; click or tab-and-Enter a state to drill into its counties. Solid fill
+tabs; click or tab-and-Enter a state to drill into its counties. It re-pulls
+the active race once a minute, and the subtitle says what is on screen and how
+old it is. Solid fill
 means that region's own count is effectively done, a hatch means it's still
 counting, grey means no data yet, and a dashed outline marks a state where
 the raw leader disagrees with the extrapolated winner. The scoreboard totals
@@ -116,3 +139,15 @@ one, edit the other.
 
 That's it, unless I forgot something or NBC's website has changed, in which
 case good luck!
+
+## Layout
+
+| | |
+|---|---|
+| `races.py` | race config: electoral votes, which states are in play, and the two different years (`election_year` vs `nbc_cycle`) |
+| `nbc_api.py` | client for NBC's results API |
+| `fetch_results.py` | the pipeline: API → `raw_data[_<race>].csv` |
+| `build_fips_table.py` | regenerates `county_fips.json` (rarely) |
+| `generate_mock_data.py` | fictional fixtures with the same schema |
+| `map.html` | the whole UI, one static file |
+| `legacy/` | the superseded Selenium scraper, kept as a fallback |
