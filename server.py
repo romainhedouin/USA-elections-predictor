@@ -31,7 +31,7 @@ ENVIRONMENT
     REFRESH_SECONDS  int, default 900.
     RACES            comma-separated subset of president,senate,governor.
                      Default: all three.
-    NBC_CYCLE        optional, passed to fetch_results.py as --nbc-cycle.
+    DATA_YEAR        optional; the cycle to pull. Also accepts NBC_CYCLE.
     FETCH_TIMEOUT    int seconds, hard kill for one fetch, default 300.
     SEED_ON_BOOT     "0" disables the cold-start mock seed. Default on.
 """
@@ -62,7 +62,8 @@ PORT = int(os.environ.get("PORT", "8000"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", REPO_DIR / "data")).resolve()
 REFRESH_SECONDS = max(30, int(os.environ.get("REFRESH_SECONDS", "900")))
 FETCH_TIMEOUT = max(30, int(os.environ.get("FETCH_TIMEOUT", "300")))
-NBC_CYCLE = os.environ.get("NBC_CYCLE", "").strip()
+# NBC_CYCLE kept as an alias so an already-deployed service keeps working.
+DATA_YEAR = (os.environ.get("DATA_YEAR") or os.environ.get("NBC_CYCLE") or "").strip()
 SEED_ON_BOOT = os.environ.get("SEED_ON_BOOT", "1") not in ("0", "false", "no")
 
 ALL_RACES = ("president", "senate", "governor")
@@ -237,8 +238,8 @@ def refresh_race(race, *, use_mock=False):
         script = "generate_mock_data.py" if use_mock else "fetch_results.py"
         argv = [sys.executable, str(REPO_DIR / script), "--race", race,
                 "--out-dir", str(staging)]
-        if NBC_CYCLE and not use_mock:
-            argv += ["--nbc-cycle", NBC_CYCLE]
+        if DATA_YEAR and not use_mock:
+            argv += ["--nbc-cycle", DATA_YEAR]
 
         code, output = _run(argv, FETCH_TIMEOUT, label)
         duration = time.monotonic() - started
@@ -308,9 +309,9 @@ def seed_if_empty():
     # Seed EVERY race, not just the refreshed ones. The page has a tab per
     # race and fetches that race's CSV on click, so a race left unseeded is a
     # tab that 404s. Deliberately useful: pointing RACES at president alone
-    # keeps the live NBC pull to the one race that has real results today,
-    # while Senate and Governor sit on clearly-labelled mock fixtures until
-    # NBC publishes the 2026 general election.
+    # keeps the live pull to the one race that has real results today, while
+    # Senate and Governor sit on clearly-labelled mock fixtures until the 2026
+    # general election is published.
     missing = [r for r in ALL_RACES if not (DATA_DIR / csv_name(r)).exists()]
     if not missing:
         log.info("boot seed skipped - CSVs already present in %s", DATA_DIR)
@@ -407,7 +408,7 @@ def health_payload():
         "repo_dir": str(REPO_DIR),
         "refresh_seconds": REFRESH_SECONDS,
         "fetch_timeout_seconds": FETCH_TIMEOUT,
-        "nbc_cycle": NBC_CYCLE or None,
+        "data_year": DATA_YEAR or None,
         "races_refreshed": list(RACES),
         "races": races,
     }
