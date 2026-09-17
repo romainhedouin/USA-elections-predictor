@@ -34,6 +34,10 @@ ENVIRONMENT
     DATA_YEAR        optional; the cycle to pull. Also accepts NBC_CYCLE.
     FETCH_TIMEOUT    int seconds, hard kill for one fetch, default 300.
     SEED_ON_BOOT     "0" disables the cold-start mock seed. Default on.
+    REFRESH_ENABLED  "0" pauses fetching entirely. The site stays up and keeps
+                     serving whatever is already on the volume; nothing is
+                     pulled from upstream. Useful out of season, and the switch
+                     you want if you need to stop traffic in a hurry.
 """
 
 import json
@@ -65,6 +69,7 @@ FETCH_TIMEOUT = max(30, int(os.environ.get("FETCH_TIMEOUT", "300")))
 # NBC_CYCLE kept as an alias so an already-deployed service keeps working.
 DATA_YEAR = (os.environ.get("DATA_YEAR") or os.environ.get("NBC_CYCLE") or "").strip()
 SEED_ON_BOOT = os.environ.get("SEED_ON_BOOT", "1") not in ("0", "false", "no")
+REFRESH_ENABLED = os.environ.get("REFRESH_ENABLED", "1") not in ("0", "false", "no")
 
 ALL_RACES = ("president", "senate", "governor")
 
@@ -331,6 +336,11 @@ def scheduler_loop():
     blows up we log it and keep going, because a dead scheduler on election
     night is a silently frozen map.
     """
+    if not REFRESH_ENABLED:
+        # Paused: keep serving whatever is on the volume, fetch nothing.
+        log.warning("scheduler PAUSED (REFRESH_ENABLED=0) - serving existing "
+                    "data, not fetching. Unset it to resume.")
+        return
     log.info("scheduler started interval=%ss races=%s timeout=%ss",
              REFRESH_SECONDS, ",".join(RACES), FETCH_TIMEOUT)
     while not STOP.is_set():
@@ -406,6 +416,7 @@ def health_payload():
         "uptime_seconds": round(time.time() - BOOT_TIME, 1),
         "data_dir": str(DATA_DIR),
         "repo_dir": str(REPO_DIR),
+        "refresh_enabled": REFRESH_ENABLED,
         "refresh_seconds": REFRESH_SECONDS,
         "fetch_timeout_seconds": FETCH_TIMEOUT,
         "data_year": DATA_YEAR or None,
