@@ -1,47 +1,59 @@
+"""Scrape NBC News' presidential-results hub page for the list of per-state result pages."""
+
+import argparse
+import json
+import re
+
 import requests
 from bs4 import BeautifulSoup
-import re
-import json
 
-# Base URL for the site
-base_url = "https://www.nbcnews.com"
-main_url = base_url + "/politics/2024-elections/president-results"
-
-# Pattern to match links with "/president-results" in the URL
-pattern = re.compile(r"/politics/2024-elections/.+-president-results")
-
-# List to store unique matching links while preserving order
-matching_links = []
-
-# Function to retrieve and parse links from a page
-def get_links_from_page(url):
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        # Find the h2 element with the specific text
-        start_collecting = False
-        for element in soup.find_all(True):
-            # Start collecting after finding the target h2
-            if element.name == "h2" and "All Presidential races" in element.get_text():
-                start_collecting = True
-                continue
-            
-            # Collect matching links only after "All Presidential races" h2 is found
-            if start_collecting and element.name == "a" and element.has_attr("href"):
-                href = element["href"]
-                if pattern.match(href) and href not in matching_links:
-                    matching_links.append(href.split('/')[3].split('-president-results')[0])  # Add only if it’s not already in the list
-
-    except requests.RequestException as e:
-        print(f"Error fetching {url}: {e}")
-
-# Start with the base URL
-get_links_from_page(main_url)
+BASE_URL = "https://www.nbcnews.com"
+MAIN_URL = f"{BASE_URL}/politics/2024-elections/president-results"
+STATE_LINK_PATTERN = re.compile(r"/politics/2024-elections/.+-president-results")
 
 
-with open('nbc_states.json', 'w') as file:
-    file.write(json.dumps(matching_links, indent=4))
+def fetch_state_slugs(url):
+    """Return the ordered, de-duplicated list of state slugs linked from the results hub page."""
+    response = requests.get(url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
 
-print("Links saved to nbc_states.json")
+    slugs = []
+    seen = set()
+    start_collecting = False
+
+    for element in soup.find_all(True):
+        if element.name == "h2" and "All Presidential races" in element.get_text():
+            start_collecting = True
+            continue
+
+        if not start_collecting or element.name != "a" or not element.has_attr("href"):
+            continue
+
+        href = element["href"]
+        if not STATE_LINK_PATTERN.match(href):
+            continue
+
+        slug = href.split("/")[3].removesuffix("-president-results")
+        if slug not in seen:
+            seen.add(slug)
+            slugs.append(slug)
+
+    return slugs
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", default="nbc_states.json", help="Where to write the state slug list")
+    args = parser.parse_args()
+
+    slugs = fetch_state_slugs(MAIN_URL)
+
+    with open(args.output, "w") as file:
+        json.dump(slugs, file, indent=4)
+
+    print(f"Saved {len(slugs)} states to {args.output}")
+
+
+if __name__ == "__main__":
+    main()
