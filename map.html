@@ -23,14 +23,15 @@
   :root {
     color-scheme: light dark;
 
-    --dem-certain:   #00337c;
-    --dem-projected: #74a9f0;
-    --rep-certain:   #ce3e39;
-    --rep-projected: #ffb37e;
-    --no-data:       #e6ebed;
+    /* Traditional US election-map blue and red. */
+    --dem-certain:   #1c4e8c;
+    --dem-projected: #a8c8e8;
+    --rep-certain:   #b02127;
+    --rep-projected: #efb0ac;
+    --no-data:       #e4e7ea;
     --no-race:       #f2f4f6;
     --no-race-line:  #d4dade;
-    --mismatch:      #0b0e14;
+    --mismatch:      #f0b400;
     --mismatch-casing: #ffffff;
 
     --ink: #1b2430;
@@ -51,17 +52,34 @@
     --map-chrome: 23rem;
   }
 
+  /* Colour-blind mode. The light tints above sit almost entirely on the
+     red-green axis, which is the axis protanopia and deuteranopia remove, so
+     "Republican projected" pink collapses into the "no data" grey. Swapping it
+     for a warm orange fixes that, which in turn kills yellow as the mismatch
+     colour (it then collides with the orange), so mismatch becomes a dark
+     dashed outline instead. Every pair is >= 20 CIEDE2000 apart under
+     simulated protanopia, deuteranopia and tritanopia. */
+  :root[data-palette="cvd"] {
+    --dem-certain:   #00337c;
+    --dem-projected: #74a9f0;
+    --rep-certain:   #ce3e39;
+    --rep-projected: #ffb37e;
+    --no-data:       #e6ebed;
+    --mismatch:      #0b0e14;
+    --mismatch-casing: #ffffff;
+  }
+
   @media (prefers-color-scheme: dark) {
     :root {
       /* Polarity inverts in the dark: "certain" is the bright, saturated one. */
-      --dem-certain:   #4d87c5;
-      --dem-projected: #2e4f80;
-      --rep-certain:   #ffb7b6;
-      --rep-projected: #7d343a;
+      --dem-certain:   #6aa5e8;
+      --dem-projected: #2c4d7a;
+      --rep-certain:   #f08a86;
+      --rep-projected: #7a2f33;
       --no-data:       #2b323d;
       --no-race:       #1e242d;
       --no-race-line:  #2f3743;
-      --mismatch:      #f2f5f9;
+      --mismatch:      #ffc93c;
       --mismatch-casing: #0f1319;
 
       --ink: #e7ebf1;
@@ -74,6 +92,16 @@
       --chip: #232a34;
       --chip-hover: #2c3440;
       --danger: #f59a9a;
+    }
+
+    :root[data-palette="cvd"] {
+      --dem-certain:   #4d87c5;
+      --dem-projected: #2e4f80;
+      --rep-certain:   #ffb7b6;
+      --rep-projected: #7d343a;
+      --no-data:       #2b323d;
+      --mismatch:      #f2f5f9;
+      --mismatch-casing: #0f1319;
     }
   }
 
@@ -118,6 +146,7 @@
     justify-content: space-between; gap: 0.75rem 1.5rem; margin-bottom: 1rem;
   }
   header .titles { min-width: 0; }
+  .header-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   header h1 { font-size: clamp(1.15rem, 1rem + 1.2vw, 1.55rem); margin: 0 0 0.2rem; letter-spacing: -0.01em; }
   header p.subtitle { margin: 0; color: var(--muted); font-size: 0.9rem; }
   .badge {
@@ -125,7 +154,9 @@
     text-transform: uppercase; padding: 0.15rem 0.45rem; border-radius: 5px; margin-right: 0.45rem;
     background: var(--chip); color: var(--muted); vertical-align: 1px;
   }
-  .badge.demo { background: var(--mismatch); color: var(--mismatch-casing); }
+  /* Deliberately not the mismatch colour: that hue means one specific thing on
+     the map, and reusing it here would imply a relationship that isn't there. */
+  .badge.demo { background: var(--ink); color: var(--page-bg); }
 
   .tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .tabs button {
@@ -136,6 +167,17 @@
   }
   .tabs button .tab-year { font-size: 0.72rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
   .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--page-bg); border-color: var(--ink); }
+
+  #palette-toggle {
+    font: inherit; font-size: 0.8rem; min-height: 44px; padding: 0.4rem 0.8rem;
+    border-radius: 9px; border: 1px solid var(--border); background: var(--card-bg);
+    color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;
+  }
+  #palette-toggle[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+  #palette-toggle .dot {
+    width: 11px; height: 11px; border-radius: 50%; flex: none;
+    background: linear-gradient(135deg, var(--dem-certain) 50%, var(--rep-certain) 50%);
+  }
 
   /* ---------- cards ---------- */
   .card {
@@ -196,14 +238,20 @@
      which survives greyscale and monochrome print where colour cannot.
      non-scaling-stroke keeps it the same screen thickness in the zoomed-in
      drill-down as on the national map. */
-  .mismatch-casing {
-    fill: none; stroke: var(--mismatch-casing); stroke-width: 5; pointer-events: none;
+  .mismatch-casing { display: none; }
+  .mismatch-outline {
+    fill: none; stroke: var(--mismatch); stroke-width: 2.5; pointer-events: none;
     vector-effect: non-scaling-stroke;
   }
-  .mismatch-outline {
-    fill: none; stroke: var(--mismatch); stroke-width: 2.2; pointer-events: none;
-    stroke-dasharray: 6 4; stroke-linecap: butt;
-    vector-effect: non-scaling-stroke;
+  /* In colour-blind mode the marker cannot rely on hue, so it gets a light
+     casing to stay legible on every fill and a dash pattern that survives
+     greyscale entirely. */
+  :root[data-palette="cvd"] .mismatch-casing {
+    display: block; fill: none; stroke: var(--mismatch-casing); stroke-width: 5;
+    pointer-events: none; vector-effect: non-scaling-stroke;
+  }
+  :root[data-palette="cvd"] .mismatch-outline {
+    stroke-width: 2.2; stroke-dasharray: 6 4; stroke-linecap: butt;
   }
 
   /* ---------- legend ---------- */
@@ -218,10 +266,13 @@
   }
   /* The hatch that marks "projected" on the map, reproduced as a CSS gradient
      for the flat HTML swatches. */
-  .sw-dem-projected { background: repeating-linear-gradient(45deg,  var(--dem-projected) 0 4px, var(--dem-certain) 4px 5.4px); }
-  .sw-rep-projected { background: repeating-linear-gradient(-45deg, var(--rep-projected) 0 4px, var(--rep-certain) 4px 5.4px); }
+  .sw-dem-projected { background: var(--dem-projected); }
+  .sw-rep-projected { background: var(--rep-projected); }
   .sw-no-race       { background: repeating-linear-gradient(45deg,  var(--no-race) 0 4px, var(--no-race-line) 4px 5.4px); }
-  #legend .mismatch-swatch { background: var(--no-data); border: 2px dashed var(--mismatch); }
+  #legend .mismatch-swatch { background: var(--no-data); border: 2px solid var(--mismatch); }
+  :root[data-palette="cvd"] .sw-dem-projected { background: repeating-linear-gradient(45deg,  var(--dem-projected) 0 4px, var(--dem-certain) 4px 5.4px); }
+  :root[data-palette="cvd"] .sw-rep-projected { background: repeating-linear-gradient(-45deg, var(--rep-projected) 0 4px, var(--rep-certain) 4px 5.4px); }
+  :root[data-palette="cvd"] #legend .mismatch-swatch { border-style: dashed; }
 
   /* ---------- tooltip ---------- */
   #tooltip {
@@ -272,8 +323,10 @@
     :root { --map-chrome: 27rem; }
     header { display: block; margin-bottom: 1rem; }
     header .titles { margin-bottom: 0.85rem; }
+    .header-controls { display: block; }
     .tabs { display: grid; grid-template-columns: repeat(3, 1fr); }
     .tabs button { padding: 0.4rem 0.3rem; }
+    #palette-toggle { width: 100%; justify-content: center; margin-top: 0.4rem; }
   }
 
   /* ---------- phone ---------- */
@@ -342,7 +395,13 @@
       <h1>USA Election Live Predictor</h1>
       <p class="subtitle" id="subtitle"></p>
     </div>
-    <div class="tabs" id="race-tabs" role="group" aria-label="Race"></div>
+    <div class="header-controls">
+      <div class="tabs" id="race-tabs" role="group" aria-label="Race"></div>
+      <button id="palette-toggle" type="button" aria-pressed="false"
+              title="Switch to a palette that stays distinguishable with colour-vision deficiency">
+        <span class="dot" aria-hidden="true"></span><span id="palette-label">Colour-blind mode</span>
+      </button>
+    </div>
   </header>
 
   <div class="card score-card">
@@ -351,7 +410,7 @@
 
   <div class="card map-card">
     <p class="map-hint">Click a state to drill down to its counties.
-      <span class="hint-long">Solid means that region is done counting, hatched means it is still counting.</span></p>
+      <span class="hint-long"><span class="hint-plain">Deeper colour means that region is done counting.</span><span class="hint-cvd" style="display:none">Solid means that region is done counting, hatched means it is still counting.</span></span></p>
     <svg id="map" class="loading" viewBox="0 0 975 610" role="img" aria-label="Map of the United States coloured by projected winner"></svg>
     <div id="loading" role="status">Loading map data&hellip;</div>
     <div id="error" role="alert"></div>
@@ -666,9 +725,14 @@ function start(topology, president) {
     return width > 0 ? viewBoxWidth / width : 1;
   }
 
+  // The hatch is a redundant, non-colour encoding of "still counting". It is
+  // worth the visual noise only when hue is unreliable, so plain mode uses the
+  // lighter tint on its own.
+  const cvdMode = () => document.documentElement.dataset.palette === "cvd";
+
   function leaderFill(leader, certain, ns) {
-    if (leader === "D") return certain ? COLORS.demCertain : `url(#hatch-dem-${ns})`;
-    if (leader === "R") return certain ? COLORS.repCertain : `url(#hatch-rep-${ns})`;
+    if (leader === "D") return certain ? COLORS.demCertain : (cvdMode() ? `url(#hatch-dem-${ns})` : COLORS.demProjected);
+    if (leader === "R") return certain ? COLORS.repCertain : (cvdMode() ? `url(#hatch-rep-${ns})` : COLORS.repProjected);
     return COLORS.noData; // tie, or nothing resolved yet
   }
 
@@ -871,24 +935,27 @@ function start(topology, president) {
     const parts = [];
     let badge = "";
 
+    let title = "County results extrapolated to full reporting.";
+
     if (!info) {
       parts.push(`${meta.label} ${meta.year}`);
     } else if (info.source === "mock") {
-      badge = '<span class="badge demo">Demo data</span>';
-      parts.push(`Illustrative ${meta.label} ${meta.year} figures — no votes have been cast`);
+      badge = '<span class="badge demo">Demo</span>';
+      parts.push(`${meta.label} ${meta.year} · illustrative figures`);
+      title = `No votes have been cast. ${title}`;
     } else if (String(info.dataYear) !== String(info.electionYear)) {
-      badge = '<span class="badge">Live results</span>';
-      parts.push(`${info.dataYear} ${meta.label} results — live ${info.electionYear} coverage begins once results are published`);
+      badge = '<span class="badge">Live</span>';
+      parts.push(`${info.dataYear} ${meta.label} results`);
+      title = `Live ${info.electionYear} coverage begins once results are published. ${title}`;
     } else {
-      badge = '<span class="badge">Live results</span>';
+      badge = '<span class="badge">Live</span>';
       parts.push(`${meta.label} ${info.electionYear} results`);
     }
     if (info) {
       const age = describeAge(info.fetchedAt);
       if (age) parts.push(age);
     }
-    parts.push("county results extrapolated to full reporting");
-    d3.select("#subtitle").html(badge + parts.join(" · "));
+    d3.select("#subtitle").html(badge + parts.join(" · ")).attr("title", title);
   }
 
   function switchRace(race) {
@@ -1049,6 +1116,25 @@ function start(topology, president) {
       })
       .catch(err => console.warn("refresh failed, keeping current data", err));
   }, REFRESH_SECONDS * 1000);
+
+  // Remembered across visits: someone who needs this palette needs it every time.
+  const paletteButton = document.getElementById("palette-toggle");
+  function applyPalette(useCvd, redraw) {
+    document.documentElement.dataset.palette = useCvd ? "cvd" : "";
+    paletteButton.setAttribute("aria-pressed", String(useCvd));
+    document.getElementById("palette-label").textContent = useCvd ? "Standard colours" : "Colour-blind mode";
+    d3.select(".hint-plain").style("display", useCvd ? "none" : null);
+    d3.select(".hint-cvd").style("display", useCvd ? null : "none");
+    if (redraw) { redrawAll(); renderScoreboard(); }
+  }
+  paletteButton.addEventListener("click", () => {
+    const useCvd = paletteButton.getAttribute("aria-pressed") !== "true";
+    try { localStorage.setItem("palette", useCvd ? "cvd" : "standard"); } catch (err) { /* private mode */ }
+    applyPalette(useCvd, true);
+  });
+  let storedPalette = null;
+  try { storedPalette = localStorage.getItem("palette"); } catch (err) { /* private mode */ }
+  applyPalette(storedPalette === "cvd", false);
 
   renderRaceTabs();
   renderNational();
