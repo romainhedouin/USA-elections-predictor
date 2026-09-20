@@ -113,7 +113,6 @@ def state_results(state_slug, race_slug, cycle):
     # race holding just the congressional districts. The state-wide one is the
     # one carrying every reporting unit.
     race = max(races, key=lambda r: len(r.get("areas") or []))
-    summary = race.get("summary") or {}
 
     geography = payload.get("geography")
     fips_by_name = FIPS_TABLE.get(state_slug, {}) if geography in COUNTY_GEOGRAPHIES else {}
@@ -122,11 +121,7 @@ def state_results(state_slug, race_slug, cycle):
         "state": payload.get("stateName") or state_slug,
         "geography": geography,
         "county_level": geography in COUNTY_GEOGRAPHIES,
-        "total_expected": int(summary.get("votes") or 0) + int((summary.get("estimatedVotesRemaining") or {}).get("value") or 0),
-        "percent_in": float(summary.get("percentIn") or 0),
-        "last_modified": payload.get("lastModified"),
-        "candidates": _leading_by_party(summary.get("candidates") or []),
-        "areas": _build_areas(race.get("areas") or [], fips_by_name),
+        **_summary_fields(payload, race, fips_by_name),
     }
 
 
@@ -162,7 +157,6 @@ def district_results(geoid, cycle):
     if not races:
         return None
     race = races[0]
-    summary = race.get("summary") or {}
 
     # The office's own geography here is "districts" (payload["geography"] -
     # see state_results for the statewide equivalent of that field); what
@@ -177,6 +171,16 @@ def district_results(geoid, cycle):
         "state": info["state"],
         "geography": geography,
         "county_level": geography in COUNTY_GEOGRAPHIES,
+        **_summary_fields(payload, race, fips_by_name),
+    }
+
+
+def _summary_fields(payload, race, fips_by_name):
+    """The five fields state_results() and district_results() both derive
+    the same way from a race's summary/areas - factored out so the two stay
+    in lockstep rather than drifting if one is edited and not the other."""
+    summary = race.get("summary") or {}
+    return {
         "total_expected": int(summary.get("votes") or 0) + int((summary.get("estimatedVotesRemaining") or {}).get("value") or 0),
         "percent_in": float(summary.get("percentIn") or 0),
         "last_modified": payload.get("lastModified"),
