@@ -423,11 +423,19 @@ SAFE_STATIC_PATH = re.compile(r"^static/[A-Za-z0-9._-]+$")
 _FILE_CACHE = {}
 
 DISTRICT_ROUTE = re.compile(r"^/house-district/([0-9]{4})$")
-# geoid -> (fetched_at monotonic, status, body bytes). Bounded by
-# construction: there are only 435 possible districts, so this can never grow
-# past that even under a full-scale election-night audience.
+# geoid -> (fetched_at monotonic, status, body bytes). Bounded to the 435 real
+# districts: DISTRICT_ROUTE alone would match any of the 10,000 "NNNN" paths,
+# so _house_district_payload checks every geoid against this allowlist and
+# 404s the rest before they ever reach nbc_api or the cache below.
+_KNOWN_DISTRICT_GEOIDS = frozenset(
+    json.loads((STATIC_DATA_DIR / "house_districts.json").read_text(encoding="utf-8")).keys()
+)
 _district_cache = {}
 _district_cache_lock = threading.Lock()
+# geoid -> Event, set only while a fetch for that geoid is in flight. Lets a
+# burst of concurrent first-time requests for the same district collapse into
+# one nbc_api call instead of one per requester - see _house_district_payload.
+_district_inflight = {}
 
 
 def _house_district_payload(geoid):
@@ -441,57 +449,85 @@ def _house_district_payload(geoid):
 
     Returns (status_code, body_bytes).
     """
+    if geoid not in _KNOWN_DISTRICT_GEOIDS:
+        # DISTRICT_ROUTE matches any 4-digit path (10,000 of them); only 435
+        # are real districts. Reject the rest before they ever reach NBC or
+        # _district_cache, so the cache stays bounded to the 435 real ones.
+        return 404, json.dumps({"error": "no such district"}).encode("utf-8")
+
     now = time.monotonic()
-    with _district_cache_lock:
-        cached = _district_cache.get(geoid)
-        if cached and now - cached[0] < DISTRICT_CACHE_SECONDS:
-            return cached[1], cached[2]
+    while True:
+        with _district_cache_lock:
+            cached = _district_cache.get(geoid)
+            if cached and now - cached[0] < DISTRICT_CACHE_SECONDS:
+                return cached[1], cached[2]
+            inflight = _district_inflight.get(geoid)
+            if inflight is None:
+                # Nobody else is fetching this geoid right now - claim it so
+                # any concurrent request for the same district waits for us
+                # instead of firing its own redundant upstream call.
+                inflight = threading.Event()
+                _district_inflight[geoid] = inflight
+                break
+        # Another request already has this geoid in flight - wait for it to
+        # finish, then loop back and read what it put in the cache rather
+        # than fetching ourselves too.
+        inflight.wait(timeout=FETCH_TIMEOUT)
 
-    cycle = DATA_YEAR or RACE_CONFIG["house"]["nbc_cycle"]
     try:
-        result = nbc_api.district_results(geoid, cycle)
-    except Exception as exc:  # noqa: BLE001 - one bad district must not 500 the process
-        log.warning("house-district geoid=%s status=error err=%s", geoid, exc)
-        status, body = 502, json.dumps({"error": "upstream fetch failed"}).encode("utf-8")
-    else:
-        if result is None:
-            status, body = 404, json.dumps({"error": "no such district or no NBC page for it yet"}).encode("utf-8")
+        cycle = DATA_YEAR or RACE_CONFIG["house"]["nbc_cycle"]
+        try:
+            result = nbc_api.district_results(geoid, cycle)
+        except Exception as exc:  # noqa: BLE001 - one bad district must not 500 the process
+            log.warning("house-district geoid=%s status=error err=%s", geoid, exc)
+            status, body = 502, json.dumps({"error": "upstream fetch failed"}).encode("utf-8")
         else:
-            # Every county NBC lists for this district, reporting or not -
-            # map.html shows "no data yet" for the ones at 0%, the same way
-            # it already does for the other three races' county maps/tables,
-            # rather than silently omitting them. Real counts only - no
-            # Predicted here either; estimate.js projects these the same way
-            # it projects the CSV-sourced areas.
-            areas = [
-                {
-                    "name": area["name"],
-                    "fips": area["fips"],
-                    "percentIn": area["percent_in"],
-                    "votes": area["votes"],
-                    "demReal": area["by_party"].get("dem", 0),
-                    "repReal": area["by_party"].get("gop", 0),
+            if result is None:
+                status, body = 404, json.dumps({"error": "no such district or no NBC page for it yet"}).encode("utf-8")
+            else:
+                # Every county NBC lists for this district, reporting or not -
+                # map.html shows "no data yet" for the ones at 0%, the same way
+                # it already does for the other three races' county maps/tables,
+                # rather than silently omitting them. Real counts only - no
+                # Predicted here either; estimate.js projects these the same way
+                # it projects the CSV-sourced areas.
+                areas = [
+                    {
+                        "name": area["name"],
+                        "fips": area["fips"],
+                        "percentIn": area["percent_in"],
+                        "votes": area["votes"],
+                        "demReal": area["by_party"].get("dem", 0),
+                        "repReal": area["by_party"].get("gop", 0),
+                    }
+                    for area in result["areas"]
+                ]
+                payload = {
+                    "geoid": result["geoid"],
+                    "label": result["label"],
+                    "state": result["state"],
+                    "geography": result["geography"],
+                    "countyLevel": result["county_level"],
+                    "totalExpected": result["total_expected"],
+                    "percentIn": result["percent_in"],
+                    "demName": result["candidates"].get("dem", "Democrat"),
+                    "repName": result["candidates"].get("gop", "Republican"),
+                    "lastModified": result["last_modified"],
+                    "areas": areas,
                 }
-                for area in result["areas"]
-            ]
-            payload = {
-                "geoid": result["geoid"],
-                "label": result["label"],
-                "state": result["state"],
-                "geography": result["geography"],
-                "countyLevel": result["county_level"],
-                "totalExpected": result["total_expected"],
-                "percentIn": result["percent_in"],
-                "demName": result["candidates"].get("dem", "Democrat"),
-                "repName": result["candidates"].get("gop", "Republican"),
-                "lastModified": result["last_modified"],
-                "areas": areas,
-            }
-            status, body = 200, json.dumps(payload).encode("utf-8")
+                status, body = 200, json.dumps(payload).encode("utf-8")
 
-    with _district_cache_lock:
-        _district_cache[geoid] = (now, status, body)
-    return status, body
+        with _district_cache_lock:
+            _district_cache[geoid] = (now, status, body)
+        return status, body
+    finally:
+        # Release the in-flight claim (however we got here - success,
+        # upstream error, or an unexpected exception) so anyone still
+        # waiting on `inflight` re-checks the cache instead of blocking
+        # forever, and so the next request for this geoid can fetch again.
+        with _district_cache_lock:
+            _district_inflight.pop(geoid, None)
+        inflight.set()
 
 
 def health_payload():
