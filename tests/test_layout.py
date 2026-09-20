@@ -6,12 +6,7 @@ running off the side, the map cropped, a dialog you cannot scroll or escape.
 
 import pytest
 
-from conftest import PHONES, VIEWPORTS, severe_logs
-
-OPEN_STATE = """
-const p = [...document.querySelectorAll('#map path.state')]
-  .find(p => p.getAttribute('aria-label').startsWith(arguments[0]));
-p.dispatchEvent(new MouseEvent('click', {bubbles: true}));"""
+from conftest import OPEN_STATE, PHONES, VIEWPORTS, severe_logs
 
 
 @pytest.mark.parametrize("viewport", list(VIEWPORTS))

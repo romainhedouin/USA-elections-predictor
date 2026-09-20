@@ -20,6 +20,7 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from selenium.webdriver.support.ui import WebDriverWait
 
 from conftest import VIEWPORTS, make_driver, severe_logs, wait_ready
 
@@ -80,7 +81,7 @@ def make_handler(directory):
 
 
 @pytest.fixture
-def house_page(request, site):
+def house_page(site):
     """Like conftest's `page`, but backed by a server that also stubs
     /house-district/0601 - real district drill-down data, a real 404 for
     every other geoid, no network."""
@@ -96,7 +97,6 @@ def house_page(request, site):
         driver.get(f"{base_url}/map.html")
         wait_ready(driver)
         driver.execute_script(OPEN_HOUSE_TAB)
-        from selenium.webdriver.support.ui import WebDriverWait
         WebDriverWait(driver, 25).until(
             lambda d: d.execute_script(
                 "return document.querySelector('#race-tabs button[aria-pressed=\"true\"]')"
@@ -146,7 +146,6 @@ def test_district_drilldown_renders_fetched_counties(house_page):
     driver = house_page()
     click_district(driver, "0601")
 
-    from selenium.webdriver.support.ui import WebDriverWait
     WebDriverWait(driver, 10).until(
         lambda d: "loading" not in d.execute_script(
             "return document.querySelector('#overlay-note').textContent").lower())
@@ -164,7 +163,6 @@ def test_district_drilldown_shows_error_when_the_fetch_fails(house_page):
     driver = house_page()
     click_district(driver, "0602")
 
-    from selenium.webdriver.support.ui import WebDriverWait
     WebDriverWait(driver, 10).until(
         lambda d: "loading" not in d.execute_script(
             "return document.querySelector('#overlay-note').textContent").lower())
@@ -181,7 +179,6 @@ def test_closing_and_opening_a_different_district_does_not_show_stale_data(house
     assert not driver.execute_script("return document.querySelector('#overlay').classList.contains('open')")
 
     click_district(driver, "0602")
-    from selenium.webdriver.support.ui import WebDriverWait
     WebDriverWait(driver, 10).until(
         lambda d: "loading" not in d.execute_script(
             "return document.querySelector('#overlay-note').textContent").lower())
@@ -200,7 +197,6 @@ def test_switching_back_to_a_statewide_race_restores_the_drill_down(house_page):
     driver.execute_script("""
         const btn = [...document.querySelectorAll('#race-tabs button')].find(b => b.textContent.includes('President'));
         btn.click();""")
-    from selenium.webdriver.support.ui import WebDriverWait
     WebDriverWait(driver, 25).until(
         lambda d: d.execute_script("return document.querySelectorAll('#map path.state').length === 51"))
     driver.execute_script("""

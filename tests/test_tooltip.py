@@ -10,7 +10,7 @@ drill-down on a phone, which is exactly where the tooltip is at its tallest
 
 import pytest
 
-from conftest import VIEWPORTS, severe_logs
+from conftest import OPEN_STATE, VIEWPORTS, severe_logs
 
 # Hover a county and report where the tooltip landed, for every county in the
 # open drill-down. Centroids, so the pointer is always inside the shape.
@@ -48,11 +48,6 @@ for (let i = 0; i <= 12; i++) for (let j = 0; j <= 12; j++) {
             right: tip.right, bottom: tip.bottom, vw, vh});
 }
 return out;"""
-
-OPEN_STATE = """
-const p = [...document.querySelectorAll('#map path.state')]
-  .find(p => p.getAttribute('aria-label').startsWith(arguments[0]));
-p.dispatchEvent(new MouseEvent('click', {bubbles: true}));"""
 
 
 def offenders(samples):

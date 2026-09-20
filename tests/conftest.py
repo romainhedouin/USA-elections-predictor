@@ -38,6 +38,14 @@ VIEWPORTS = {
 }
 PHONES = ("iphone", "android")
 
+# Click the state whose aria-label starts with arguments[0]. Shared because
+# test_layout.py, test_overlay.py and test_tooltip.py all need to open a
+# state's drill-down before asserting on it.
+OPEN_STATE = """
+const p = [...document.querySelectorAll('#map path.state')]
+  .find(p => p.getAttribute('aria-label').startsWith(arguments[0]));
+p.dispatchEvent(new MouseEvent('click', {bubbles: true}));"""
+
 
 @pytest.fixture(scope="session")
 def site(tmp_path_factory):
@@ -91,12 +99,11 @@ def make_driver(width, height, mobile, theme="light", palette=None):
     driver.set_window_size(width, height)
     driver.execute_cdp_cmd("Emulation.setEmulatedMedia",
                            {"features": [{"name": "prefers-color-scheme", "value": theme}]})
-    driver._prefs = {"theme": theme, "palette": palette}
     return driver
 
 
 @pytest.fixture
-def page(request, base_url):
+def page(base_url):
     """open(viewport_name, theme=..., palette=...) -> a loaded driver."""
     drivers = []
 

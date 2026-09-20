@@ -8,12 +8,7 @@ device where precise tapping is hardest.
 import pytest
 from selenium.webdriver.common.keys import Keys
 
-from conftest import PHONES, VIEWPORTS
-
-OPEN_STATE = """
-const p = [...document.querySelectorAll('#map path.state')]
-  .find(p => p.getAttribute('aria-label').startsWith(arguments[0]));
-p.dispatchEvent(new MouseEvent('click', {bubbles: true}));"""
+from conftest import OPEN_STATE, PHONES, VIEWPORTS
 
 IS_OPEN = "return document.querySelector('#overlay').classList.contains('open');"
 
