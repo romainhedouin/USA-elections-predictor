@@ -144,7 +144,6 @@ assert REDISTRICTING_AFFECTED_DISTRICTS <= set(HOUSE_DISTRICTS)
 RACES = {
     "president": {
         "label": "President",
-        "unit": "electoral vote",
         "nbc_slug": "president",
         "election_year": 2028,  # Tue 7 Nov 2028
         "nbc_cycle": "2024",    # NBC has no 2028 pages yet (404); bump on election night
@@ -153,7 +152,6 @@ RACES = {
     },
     "senate": {
         "label": "Senate",
-        "unit": "seat",
         "nbc_slug": "senate",
         "election_year": 2026,  # Tue 3 Nov 2026
         "nbc_cycle": "2024",    # /politics/2026-elections/senate-results is a 404 today
@@ -162,7 +160,6 @@ RACES = {
     },
     "governor": {
         "label": "Governor",
-        "unit": "governorship",
         "nbc_slug": "governor",
         "election_year": 2026,  # Tue 3 Nov 2026
         "nbc_cycle": "2024",    # /politics/2026-elections/governor-results is a 404 today
@@ -171,7 +168,6 @@ RACES = {
     },
     "house": {
         "label": "House",
-        "unit": "seat",
         "nbc_slug": "house",
         "election_year": 2026,  # Tue 3 Nov 2026
         "nbc_cycle": "2024",    # /politics/2026-elections/house-results is a 404 today
