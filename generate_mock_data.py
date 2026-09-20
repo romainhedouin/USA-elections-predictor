@@ -113,14 +113,13 @@ def build_house_row(geoid, total_expected, percent_in, dem_share, rep_share):
         info["state"], info["label"], geoid, "districts",
         total_expected, total_votes, float(percent_in),
         dem_real, rep_real,
-        round(dem_real * 100 / percent_in), round(rep_real * 100 / percent_in),
         "Democrat", "Republican",
     ]
 
 
 def build_house_no_data_row(geoid):
     info = HOUSE_DISTRICTS[geoid]
-    return [info["state"], info["label"], geoid, "districts", 0, 0, 0.0, 0, 0, 0, 0, "Democrat", "Republican"]
+    return [info["state"], info["label"], geoid, "districts", 0, 0, 0.0, 0, 0, "Democrat", "Republican"]
 
 
 def build_state_rows(state_name, counties):
@@ -141,21 +140,24 @@ def build_state_rows(state_name, counties):
             state_name, county, fips, "counties",
             state_total_expected, county_total_votes, float(percent_in),
             dem_real, rep_real,
-            round(dem_real * 100 / percent_in), round(rep_real * 100 / percent_in),
             "Democrat", "Republican",
         ])
     return rows
 
 
 def build_no_data_row(state_name):
-    return [state_name, "Statewide", "", "counties", 0, 0, 0.0, 0, 0, 0, 0, "Democrat", "Republican"]
+    return [state_name, "Statewide", "", "counties", 0, 0, 0.0, 0, 0, "Democrat", "Republican"]
 
 
 def print_state_summary(state_name, rows):
+    # Predicted is no longer a CSV column (see races.CSV_HEADER) - estimate.js
+    # computes it client-side now, using the historical-swing model where a
+    # baseline exists. None of these mock rows have one, so replicate its
+    # flat fallback here just for this debug summary.
     real_d = sum(row[7] for row in rows)
     real_r = sum(row[8] for row in rows)
-    predicted_d = sum(row[9] for row in rows)
-    predicted_r = sum(row[10] for row in rows)
+    predicted_d = sum(row[7] * 100 / row[6] for row in rows if row[6])
+    predicted_r = sum(row[8] * 100 / row[6] for row in rows if row[6])
     raw_leader = "Democrat" if real_d > real_r else "Republican"
     predicted_leader = "Democrat" if predicted_d > predicted_r else "Republican"
     flip = "MISMATCH" if raw_leader != predicted_leader else "match"

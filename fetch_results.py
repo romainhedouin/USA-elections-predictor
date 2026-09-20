@@ -9,13 +9,13 @@ is one HTTP call total: NBC's national House payload is already broken down
 by district, so there's no per-state loop for it (see
 nbc_api.house_results()).
 
-Each area's current vote share is extrapolated to 100% reporting
-(Predicted = Real x 100 / PercentIn). That is a per-area scalar, so it can
-never flip an area's own leader; the interesting case is a STATE (or, for
-House, a DISTRICT) whose leader flips once you add up areas that are
-reporting at different rates, which is what the map highlights. House rows
-are districts, not counties, so that flip can only happen between districts
-today - see races.py for why a district-internal version of it is deferred.
+This file writes real vote counts only - no extrapolation. Projecting each
+area's current vote share to 100% reporting (flat, or the historical-swing
+model for areas with a baseline) happens client-side in estimate.js, per the
+decision that the server fetches/caches raw data and never computes derived
+values. See map.html for the projection and its per-STATE (or, for House,
+per-DISTRICT) leader-mismatch check, which is why it aggregates every area of
+a state rather than treating each one independently.
 """
 
 import argparse
@@ -42,15 +42,14 @@ def state_rows(payload):
     for area in payload["areas"]:
         percent_in = area["percent_in"]
         if percent_in <= 0:
-            # Nothing counted yet, so there is no share to project forward and
-            # 100/0 would blow up. Absent areas already render as "no data".
+            # Nothing counted yet, so there is no share for estimate.js to
+            # project forward. Absent areas already render as "no data".
             continue
         real = [area["by_party"].get("dem", 0), area["by_party"].get("gop", 0)]
         rows.append(
             [payload["state"], area["name"], area["fips"], payload["geography"],
              payload["total_expected"], area["votes"], percent_in]
             + real
-            + [round(v * 100 / percent_in) for v in real]
             + [dem_name, rep_name]
         )
     return rows
@@ -81,7 +80,6 @@ def house_rows(districts):
             [info["state"], info["label"], district["geoid"], "districts",
              district["total_expected"], district["votes"], percent_in]
             + real
-            + [round(v * 100 / percent_in) for v in real]
             + [district["candidates"].get("dem", ""), district["candidates"].get("gop", "")]
         )
     return rows

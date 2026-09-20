@@ -450,10 +450,12 @@ def _house_district_payload(geoid):
         if result is None:
             status, body = 404, json.dumps({"error": "no such district or no NBC page for it yet"}).encode("utf-8")
         else:
-            # "no data yet" rows are dropped, matching buildRaceData() in
-            # map.html for the other three races - a county with nothing
-            # counted has no share to extrapolate and isn't shown in their
-            # drill-down table either.
+            # Every county NBC lists for this district, reporting or not -
+            # map.html shows "no data yet" for the ones at 0%, the same way
+            # it already does for the other three races' county maps/tables,
+            # rather than silently omitting them. Real counts only - no
+            # Predicted here either; estimate.js projects these the same way
+            # it projects the CSV-sourced areas.
             areas = [
                 {
                     "name": area["name"],
@@ -462,10 +464,8 @@ def _house_district_payload(geoid):
                     "votes": area["votes"],
                     "demReal": area["by_party"].get("dem", 0),
                     "repReal": area["by_party"].get("gop", 0),
-                    "demPredicted": round(area["by_party"].get("dem", 0) * 100 / area["percent_in"]),
-                    "repPredicted": round(area["by_party"].get("gop", 0) * 100 / area["percent_in"]),
                 }
-                for area in result["areas"] if area["percent_in"] > 0
+                for area in result["areas"]
             ]
             payload = {
                 "geoid": result["geoid"],
@@ -666,8 +666,21 @@ class Handler(BaseHTTPRequestHandler):
         if suffix in STATIC_TYPES:
             candidate = REPO_DIR / name
             if candidate.is_file():
+                # historical_<race>.json is a per-cycle build artifact (see
+                # build_historical_baseline.py) that only changes when someone
+                # reruns that script - in production that's rare enough to
+                # cache hard. Forced to no-cache for now instead: while this
+                # file is being actively rebuilt during development, a long
+                # max-age is exactly what makes an intermediate proxy/tunnel
+                # keep serving a stale copy through what looks like a normal
+                # hard refresh (a client's no-cache request header isn't
+                # guaranteed to reach past every such proxy, but no-cache on
+                # the RESPONSE forces a revalidation round-trip regardless).
+                # Switch back to a long max-age once the data stops changing
+                # day to day.
+                cache = "no-cache" if name.startswith("historical_") else "public, max-age=300"
                 return self._send_file(candidate, STATIC_TYPES[suffix],
-                                       {"Cache-Control": "public, max-age=300"}, head_only)
+                                       {"Cache-Control": cache}, head_only)
         return self._not_found(head_only)
 
     def do_GET(self):

@@ -8,18 +8,158 @@ county map; House renders as a district map (see "House is different" below).
 
 ## How the prediction works
 
-A county isn't done reporting just because it isn't at 100%. If a county of
-100k voters is 5% counted and currently 60% Republican, it's likely to
-finish close to 60% Republican — and because it's a big county, that can
-outweigh a small county of 5k voters that's 100% counted at 90% Democrat.
-We extrapolate each county's *current* vote share out to its expected final
-vote count, so a state's projected winner can differ from whoever's
-"leading" on raw votes counted so far. The map outlines those states.
+A county isn't done reporting just because it isn't at 100%. `estimate.js`
+(loaded by `map.html`, runs entirely client-side — `fetch_results.py` only
+ever writes real counts, never a projection) turns each area's partial count
+into a projection for its full count, one of two ways:
 
-Note this only ever shows up once you **aggregate**: within a single county,
-`Predicted = Real × (100 / PercentIn)` scales both candidates by the same
-number, so the leader can't flip. The flip comes from combining counties
-that are reporting at different rates.
+- **With a historical baseline** (see "Historical baseline" below): compare
+  the county's own counted-so-far split to how it voted last time, and treat
+  the difference as a swing. That swing is trusted more as more of the state
+  reports — both by vote share and by how many distinct counties have
+  reported, so one large county reporting alone can't manufacture false
+  confidence — and applied to the historical split for the vote still to
+  come. At 0% counted there is nothing to extrapolate from, so no projection
+  is shown at all; showing one would just be relabelling last cycle's result.
+- **Without one** (no seat-year match, a non-county state, a
+  redistricting-affected House district — see below): fall back to assuming
+  the remaining vote splits exactly like the vote counted so far
+  (`Predicted = Real × 100 / PercentIn`). This was the whole model before the
+  historical baseline existed, and it's still what a plain live feed alone
+  can tell you.
+
+Either way, a single county's raw leader and its own projection can now
+differ (the flat-only version couldn't: it just scaled both candidates by
+the same constant). The bigger, more visible case is still a **state**
+(or, for House, a **district**) whose projected winner differs from
+whoever's "leading" on raw votes counted so far, once you combine counties
+reporting at different rates and swings — the map outlines those. Hover any
+county for the full breakdown: historical baseline, observed swing,
+confidence, and the resulting projection.
+
+### Historical baseline
+
+`build_historical_baseline.py` builds `historical_<race>.json` once per cycle
+from [MIT Election Data and Science Lab (MEDSL)](https://electionlab.mit.edu/)
+returns, comparing each area to the *seat-correct* prior election — the same
+Senate seat's last regular election (not a flat "6 years ago," which breaks
+for special elections), the same governorship's last election (not "4 years
+ago," which breaks for New Hampshire/Vermont's 2-year terms), the prior
+presidential election, or the prior House election for that district. See
+`races.py`'s `SENATE_LAST_CONTESTED`, `GOVERNOR_LAST_ELECTED`,
+`PRESIDENT_LAST_ELECTED`, and `HOUSE_LAST_ELECTED`.
+
+MEDSL's readily available data is **county-level for President and
+district-level for House**, but **state-level only for Senate and
+Governor** — there's no per-county historical split to compare against for
+those two races, so their baseline is one number per state, applied
+uniformly to every county in it. Areas with no valid comparator at all —
+non-county states (Connecticut, Maine, Massachusetts, New Hampshire,
+Vermont, Rhode Island, Alaska, DC), and House districts whose lines changed
+in a mid-decade redistricting since the baseline year (`races.py`'s
+`REDISTRICTING_AFFECTED_DISTRICTS`: Alabama, Georgia, Louisiana, New York,
+North Carolina) — simply have no entry in the file, which is exactly the
+signal `estimate.js` uses to fall back to the flat estimate for them.
+
+**Known limitations, not bugs:** the model doesn't know what *kind* of vote
+is still outstanding (mail vs. election-day timing can itself look like a
+swing), doesn't adjust for a personal vote an open seat or a since-retired
+incumbent would have carried, and hasn't been backtested against a real past
+reporting sequence. `estimate.js`'s tests cover the math in isolation, not
+these.
+
+### Data sources & attribution
+
+`build_historical_baseline.py` supports two input shapes (`--format`):
+
+- **`medsl`** (default) — the **MIT Election Data and Science Lab (MEDSL)**
+  long-format returns, Harvard Dataverse, CC0-licensed. This is the
+  authoritative source for House/Senate/Governor and the one the script's
+  column names are documented against. Its Dataverse API requires a
+  Guestbook response before it serves a file, so there's no tokenless URL to
+  automate the download - fetch it by hand. No attribution is legally
+  required (CC0), but it's good practice to cite it anyway:
+
+  > MIT Election Data and Science Lab, "U.S. House, Senate, Gubernatorial, and
+  > Presidential Election Returns," Harvard Dataverse.
+
+- **`wide`** — a pre-aggregated, one-row-per-county CSV, freely downloadable
+  with no gate. **`historical_president.json`, as checked into this repo,
+  was built from this**: [tonmcg/US_County_Level_Election_Results_08-24](https://github.com/tonmcg/US_County_Level_Election_Results_08-24)
+  (MIT-licensed), which compiles 2024 county-level results from Fox News'
+  election-night reporting - real, comprehensive (~3,150 counties), but
+  compiled from a news scrape rather than certified official returns, so
+  treat individual close counties with appropriate skepticism. President
+  only - no equivalent wide file exists for House/Senate/Governor.
+
+**Per-race status, honestly:**
+- **President** — real, comprehensive (`wide` source above).
+- **Senate** — real and comprehensive too, just via a different route than
+  planned: MEDSL's own ["U.S. Senate statewide 1976–2024"](https://doi.org/10.7910/DVN/PEJ5QU)
+  turned out to have **no Guestbook gate** (unlike the datasets this file's
+  docstring originally assumed), so `historical_senate.json` is built
+  straight from it with `--format medsl` - no workaround needed. One state
+  is missing on purpose, not by mistake: MEDSL's own 2020 file leaves
+  Wyoming's Senate candidates unclassified by party (`party_detailed` and
+  `party_simplified` both blank/"OTHER" for that state/year specifically),
+  so `statewide_baseline` correctly finds no two-party split to record and
+  Wyoming's Senate race falls back to the flat estimate - not hand-patched,
+  since that would mean asserting a party affiliation the source data
+  itself doesn't provide.
+- **House and Governor — ballot COUNT only, not a party split.** Neither has
+  a real party-share baseline (see the gating story below), but both now
+  have a real total-ballots figure per area, which is a materially
+  weaker but still genuinely real claim: `estimate.js`'s
+  `expectedTotalVotes()` only needs an entry's `votes` field, so a
+  `{votes, year}` entry with no `demShare`/`repShare` still powers the "X
+  total ballots" figure honestly while correctly falling back to the flat
+  estimate for the D/R projection (no assumed party lean where we have none).
+  - **House**: `historical_house.json` is built with
+    `--format house-county-weighted` - no real per-district total was
+    available (see below), so each district's total is built by summing its
+    actual constituent counties' real 2024 presidential votes (the same
+    `wide` source as President), using the Census Bureau's own
+    [county↔congressional-district relationship file](https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.2020.html)
+    ("119th Congressional District to County") to know which counties are
+    in which district - a real geographic join, not an assumption that
+    every district in a state is equal in size the way an earlier version
+    of this (`--format house-state-apportioned`, still available) did. A
+    county entirely inside one district contributes its whole real total
+    exactly. A county split across multiple districts (~13% of them) is
+    divided by each district's REMAINING population quota, not land area:
+    redistricting law requires near-exactly equal population per district
+    within a state, so a district's fair share of the state's total is
+    `state_total / num_districts`, and whatever it doesn't already get from
+    whole counties is what it still needs from the split ones. An earlier
+    version of this split by land-area share instead, which badly
+    distorted counties like Maricopa, AZ - it spans both dense Phoenix
+    suburbs and vast empty desert, so an area-weighted split starved the
+    urban districts of nearly all of Maricopa's real vote count and handed
+    it to whichever district happened to grab the empty desert. Connecticut's
+    5 districts are the one remaining gap: it abolished counties for
+    government purposes in 2022, so the Census file uses modern planning
+    regions there while our vote data still uses legacy county FIPS - those
+    5 fall back to the flat estimate like any other area with no historical
+    entry.
+  - **Governor**: hand-extracted, one fetch per state, from each state's own
+    "20XX \<State\> gubernatorial election" Wikipedia article (the omnibus
+    "20XX United States gubernatorial elections" summary page is too long
+    to extract cleanly in one pass). Several figures are a two-major-party
+    sum rather than a certified exact total - Wikipedia's own infobox didn't
+    always surface minor-party/write-in figures in what got fetched - so
+    treat these as accurate to within a percent or two, not exact.
+  - Neither of these is comprehensive party-share data: House's actual MEDSL
+    file (["U.S. House 1976–2024"](https://doi.org/10.7910/DVN/IG0UN2)) IS
+    Guestbook-gated (confirmed by trying), and no ungated mirror covering our
+    needed year (2024) turned up - it's likely buildable from MEDSL's real,
+    ungated 2024 precinct-level files instead, just real aggregation work
+    not yet done. Governor doesn't even have an equivalent long-format MEDSL
+    dataset to gate in the first place - gubernatorial elections aren't
+    federally standardized the way President/Senate/House are, and MEDSL's
+    own "State Elections" Dataverse collection only goes back to 2016
+    single-year snapshots, one of which is itself gated.
+
+See <https://electionlab.mit.edu/data> for the individual dataset DOIs.
 
 ## Requirements
 
@@ -206,9 +346,11 @@ case good luck!
 |---|---|
 | `races.py` | race config: electoral votes, which states are in play, House's 435 districts, and the two different years (`election_year` vs `nbc_cycle`) |
 | `nbc_api.py` | client for NBC's results API |
-| `fetch_results.py` | the pipeline: API → `raw_data[_<race>].csv` |
+| `fetch_results.py` | the pipeline: API → `raw_data[_<race>].csv` (real counts only - no projection) |
 | `build_fips_table.py` | regenerates `county_fips.json` (rarely) |
 | `build_district_topology.sh` | regenerates `districts-albers-10m.json` and `house_districts.json` (rarely - see "House is different") |
+| `build_historical_baseline.py` | regenerates `historical_<race>.json` from MEDSL data (once per cycle - see "Historical baseline") |
+| `estimate.js` | the projection math (flat and historical-swing) - runs client-side, loaded by `map.html` |
 | `generate_mock_data.py` | fictional fixtures with the same schema |
 | `map.html` | the whole UI, one static file |
 | `legacy/` | the superseded Selenium scraper, kept as a fallback |
@@ -239,3 +381,8 @@ then fetches live results for whichever races `RACES` names.
 | `FETCH_TIMEOUT` | `300` | hard kill per race | `/healthz` reports
 per-race freshness, last success and last error. A failed refresh keeps serving
 the last good data. See `DEPLOY.md` for the Railway steps.
+
+## License
+
+MIT - see `LICENSE`. Prior-cycle results used for the historical baseline are
+from MEDSL, separately CC0-licensed - see "Data sources & attribution" above.

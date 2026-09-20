@@ -44,6 +44,11 @@ def site(tmp_path_factory):
     """map.html + mock CSVs in a temp dir."""
     root = tmp_path_factory.mktemp("site")
     shutil.copy(REPO / "map.html", root / "map.html")
+    # map.html loads this as a plain <script> on every page load (see the
+    # projection math it moved client-side into), so it 404s and the page
+    # never finishes rendering without it - same reason districts-albers-10m
+    # below isn't conditional on the House tab either.
+    shutil.copy(REPO / "estimate.js", root / "estimate.js")
     # map.html fetches this unconditionally on boot (not just when the House
     # tab is opened - see start()), so every test needs it present, not only
     # ones that exercise House.
@@ -53,6 +58,11 @@ def site(tmp_path_factory):
             [sys.executable, str(REPO / "generate_mock_data.py"), "--race", race, "--out-dir", str(root)],
             cwd=REPO, check=True, capture_output=True,
         )
+        # In production this is build_historical_baseline.py's output; an
+        # empty baseline is a legitimate result (see its docstring - not
+        # every area gets one) and, unlike a missing file, doesn't 404 and
+        # trip the "no severe console errors" assertions below.
+        (root / f"historical_{race}.json").write_text("{}", encoding="utf-8")
     return root
 
 

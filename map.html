@@ -42,6 +42,13 @@
     --rep-certain:   #b02127;
     --rep-projected: #efb0ac;
     --no-data:       #e4e7ea;
+    /* One level fainter than "projected": nobody's own projected total has
+       even reached a majority of the state's estimated ballots yet (see
+       callOf) - defined once here, not per theme block, because it's always
+       a blend of whatever --*-projected/--no-data that theme is already
+       using, so it stays correct if either of those is ever retuned. */
+    --dem-faint: color-mix(in srgb, var(--dem-projected) 35%, var(--no-data));
+    --rep-faint: color-mix(in srgb, var(--rep-projected) 35%, var(--no-data));
     --no-race:       #f2f4f6;
     --no-race-line:  #d4dade;
     --mismatch:      #f0b400;
@@ -315,10 +322,14 @@
   }
   /* The hatch that marks "projected" on the map, reproduced as a CSS gradient
      for the flat HTML swatches. */
+  .sw-dem-faint     { background: var(--dem-faint); }
+  .sw-rep-faint     { background: var(--rep-faint); }
   .sw-dem-projected { background: var(--dem-projected); }
   .sw-rep-projected { background: var(--rep-projected); }
   .sw-no-race       { background: repeating-linear-gradient(45deg,  var(--no-race) 0 4px, var(--no-race-line) 4px 5.4px); }
   #legend .mismatch-swatch { background: var(--no-data); border: 2px solid var(--mismatch); }
+  :root[data-palette="cvd"] .sw-dem-faint { background: repeating-linear-gradient(45deg,  var(--no-data) 0 4px, var(--dem-projected) 4px 4.9px); }
+  :root[data-palette="cvd"] .sw-rep-faint { background: repeating-linear-gradient(-45deg, var(--no-data) 0 4px, var(--rep-projected) 4px 4.9px); }
   :root[data-palette="cvd"] .sw-dem-projected { background: repeating-linear-gradient(45deg,  var(--dem-projected) 0 4px, var(--dem-certain) 4px 5.4px); }
   :root[data-palette="cvd"] .sw-rep-projected { background: repeating-linear-gradient(-45deg, var(--rep-projected) 0 4px, var(--rep-certain) 4px 5.4px); }
   :root[data-palette="cvd"] #legend .mismatch-swatch { border-style: dashed; }
@@ -379,12 +390,24 @@
   .cand-numbers .arrow { color: var(--muted); margin: 0 0.3rem; }
   /* Counted votes solid, the extrapolated remainder in the lighter tint - the
      same certain/projected pairing the map uses, so the bar reads the same way. */
-  .cand-bar { grid-column: 1 / -1; height: 9px; border-radius: 5px; background: var(--no-data); overflow: hidden; display: flex; }
+  .cand-bar { grid-column: 1 / -1; height: 9px; border-radius: 5px; background: var(--no-data); overflow: hidden; display: flex; position: relative; }
   .cand-bar .counted, .cand-bar .projected { height: 100%; }
+  /* Halfway point of the bar's own scale (the full ballot estimate, not just
+     what's been projected so far) - a fixed reference for how much of the
+     track is still grey, i.e. still outside our own projection. */
+  .cand-bar-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--ink); opacity: 0.35; }
   .cand-sub { grid-column: 1 / -1; font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
   /* ---------- drill-down: area table ---------- */
-  #overlay-table-wrap { margin-top: 0.9rem; max-height: 46svh; overflow: auto; border-top: 1px solid var(--border); }
+  /* No max-height/overflow of its own: #overlay-panel is already the
+     scroller (max-height: 90svh; overflow: auto above), and a table long
+     enough to also scroll independently turns this into a scroller nested
+     inside a scroller - awkward to use once a table has more than a
+     handful of rows (which it now regularly does - see the "every county,
+     not just reporting ones" change). One scroll context for the whole
+     panel, matching the mobile sheet's own fix for the identical problem
+     below. */
+  #overlay-table-wrap { margin-top: 0.9rem; border-top: 1px solid var(--border); }
   #overlay-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
   #overlay-table th, #overlay-table td { padding: 0.38rem 0.5rem; text-align: right; white-space: nowrap; }
   #overlay-table th:first-child, #overlay-table td:first-child { text-align: left; white-space: normal; }
@@ -538,10 +561,12 @@
     <div id="legend" tabindex="-1">
       <span><i style="background:var(--no-data)"></i> no data yet</span>
       <span><i class="sw-no-race"></i> no race this cycle</span>
-      <span><i class="sw-dem-projected"></i> Democrat projected</span>
-      <span><i style="background:var(--dem-certain)"></i> Democrat certain</span>
-      <span><i class="sw-rep-projected"></i> Republican projected</span>
-      <span><i style="background:var(--rep-certain)"></i> Republican certain</span>
+      <span><i class="sw-dem-faint"></i> Democrat leading</span>
+      <span><i class="sw-dem-projected"></i> Democrat projected >50%</span>
+      <span><i style="background:var(--dem-certain)"></i> Officially Democrat</span>
+      <span><i class="sw-rep-faint"></i> Republican leading</span>
+      <span><i class="sw-rep-projected"></i> Republican projected >50%</span>
+      <span><i style="background:var(--rep-certain)"></i> Officially Republican</span>
       <span class="legend-wide"><i class="mismatch-swatch"></i> raw leader &ne; projected winner</span>
     </div>
   </div>
@@ -566,6 +591,7 @@
 <!--CONFIG-->
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<script src="estimate.js"></script>
 <script>
 const TOPOLOGY_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-albers-10m.json";
 // us-atlas ships counties and states only - no congressional-district layer
@@ -573,7 +599,14 @@ const TOPOLOGY_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-albers-10
 // build_district_topology.sh from the Census cd119 shapefile, reprojected
 // into the exact Albers USA us-atlas itself uses so the two line up.
 const DISTRICT_TOPOLOGY_URL = "districts-albers-10m.json";
-const CERTAIN_THRESHOLD = 95; // % reporting above which we call a race "certain" rather than "projected"
+// Bump this whenever historical_<race>.json is regenerated. A response
+// header change (even Cache-Control: no-cache) doesn't invalidate what a
+// browser already has cached from an earlier load under the old, much
+// longer max-age - and a hard reload doesn't reliably bypass the cache for
+// a fetch() call the way it does for the page's own declared resources.
+// Changing the URL is the one thing that's guaranteed to miss any stale
+// cache entry, browser or intermediate proxy, no matter how it got stale.
+const HISTORICAL_DATA_VERSION = 4;
 const HATCH_PX = 5;           // hatch tile size, in screen pixels, for "projected" fills
 const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
 
@@ -586,6 +619,7 @@ const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
 const RACE_META = {
   president: {
     label: "President", unit: "electoral vote", year: 2028, csv: "raw_data.csv",
+    historical: "historical_president.json", historicalKey: "fips",
     winNote: "270 of 538 to win",
     weights: {
       Alabama: 9, Alaska: 3, Arizona: 11, Arkansas: 6, California: 54, Colorado: 10, Connecticut: 7,
@@ -600,6 +634,7 @@ const RACE_META = {
   },
   senate: {
     label: "Senate", unit: "seat", year: 2026, csv: "raw_data_senate.csv",
+    historical: "historical_senate.json", historicalKey: "state",
     // Only 35 of 100 seats are on the ballot, so a seat count off this map is
     // not a chamber count - say so rather than implying otherwise.
     winNote: "51 of 100 for control &middot; the 65 seats not up this cycle aren't shown",
@@ -613,6 +648,7 @@ const RACE_META = {
   },
   governor: {
     label: "Governor", unit: "governorship", year: 2026, csv: "raw_data_governor.csv",
+    historical: "historical_governor.json", historicalKey: "state",
     winNote: "36 of 50 governorships on the ballot",
     weights: Object.fromEntries([
       "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Florida",
@@ -624,6 +660,7 @@ const RACE_META = {
   },
   house: {
     label: "House", unit: "seat", year: 2026, csv: "raw_data_house.csv",
+    historical: "historical_house.json", historicalKey: "fips",
     winNote: "218 of 435 for control",
     // Marks this race as keyed by district GEOID rather than by state name -
     // every other function that branches on "is this House" checks this
@@ -669,8 +706,10 @@ function snapshotColors() {
   return {
     demCertain:   cssVar(style, "--dem-certain"),
     demProjected: cssVar(style, "--dem-projected"),
+    demFaint:     cssVar(style, "--dem-faint"),
     repCertain:   cssVar(style, "--rep-certain"),
     repProjected: cssVar(style, "--rep-projected"),
+    repFaint:     cssVar(style, "--rep-faint"),
     noData:       cssVar(style, "--no-data"),
     noRace:       cssVar(style, "--no-race"),
     noRaceLine:   cssVar(style, "--no-race-line"),
@@ -691,6 +730,23 @@ function leaderOf(dem, rep) {
   if (dem > rep) return "D";
   if (rep > dem) return "R";
   return "tie";
+}
+
+// Three-way call, not a boolean "certain" - replaces a flat "95% reporting"
+// threshold (a landslide can be mathematically decided well before that; a
+// true nail-biter might not be decided even at 99%) with a test tied to how
+// many votes it actually takes to win, not how much has been counted:
+//   "certain":     REAL counted votes alone already exceed half of the
+//                  estimated total ballots - decided no matter what's left.
+//   "projected":   not yet decided, but our own swing-model projection has
+//                  one candidate over that same halfway mark.
+//   "unprojected": nobody's projected total even reaches a majority yet -
+//                  too little to call, however it might be leaning.
+function callOf(demReal, repReal, demPredicted, repPredicted, ballotEstimate) {
+  const half = ballotEstimate / 2;
+  if (Math.max(demReal, repReal) > half) return "certain";
+  if (Math.max(demPredicted, repPredicted) > half) return "projected";
+  return "unprojected";
 }
 
 // Each CSV has a sibling .meta.json saying where the numbers came from and
@@ -740,7 +796,84 @@ function parseRaceCsv(text) {
 
 window.__mapTest.clampToViewport = clampToViewport;
 
-function buildRaceData(rows, race) {
+// Fraction (0-1) of a state's total expected vote (reporting + not-yet-
+// reporting) that the areas in `areas` account for - see estimate.js's
+// expectedTotalVotes for how a not-yet-reporting county's size is estimated
+// from its historical total. Only meaningful where a "state" group can
+// contain multiple counties with genuinely independent historical baselines
+// - President. House's groups are one district each (a district's own
+// remaining vote never borrows confidence from sibling districts), and
+// Senate/Governor's baseline has no per-county granularity to weigh against
+// in the first place (see build_historical_baseline.py) - both simply trust
+// whatever percentIn on its own already indicates.
+// Two things map.html can't get from any single area, both answered by the
+// same question - "which of this state's counties does the caller not have
+// live data for, and what does history say they're worth?":
+//
+//   - reportingVoteFraction: fraction of the state's total expected vote
+//     (reporting + silent) that reporting counties represent - see
+//     estimate.js's confidenceWeight.
+//   - silentDemPredicted/silentRepPredicted: the state's total predicted
+//     vote (see the aggregate built in buildRaceData below) has to include
+//     counties with NO live data at all somehow, or it silently understates
+//     the state's true eventual total the less of it has reported - and the
+//     overlay's summary bars scale against that total, so understating it
+//     makes the bars look far more complete than they are. A silent
+//     county's historical result, scaled to its historical size, is the
+//     best estimate available until it actually reports.
+function stateHistoricalCoverage(areas, historical, race, historicalKeyOf) {
+  const nothingToWeighAgainst = { reportingVoteFraction: 1, silentDemPredicted: 0, silentRepPredicted: 0, ballotEstimateOverride: null };
+  // Senate/Governor (one historical value for the whole state) and House's
+  // national view (one row IS one whole district - see build_historical_
+  // baseline.py's house-state-apportioned format) both have exactly one
+  // relevant historical entry for the whole group, not a per-county
+  // breakdown to build a silent-counties sum from - the group's own
+  // historical total, when we have one, becomes the ballot estimate
+  // directly instead (see buildRaceData). reportingVoteFraction stays at 1
+  // for both: there's nothing finer than "the whole group" to weigh a
+  // reporting sample against, so percentIn alone drives confidence.
+  if (RACE_META[race].historicalKey === "state" || isDistrictRace(race)) {
+    const entry = areas.length ? historical[historicalKeyOf(areas[0])] : null;
+    return { ...nothingToWeighAgainst, ballotEstimateOverride: entry ? entry.votes : null };
+  }
+
+  const reportingFips = new Set(areas.map(a => a.fips).filter(Boolean));
+  const statePrefix = areas.map(a => a.fips).find(Boolean)?.slice(0, 2);
+  if (!statePrefix) return nothingToWeighAgainst; // non-county geography - no historical entry for these anyway
+
+  let reportingExpected = 0;
+  let totalExpected = 0;
+  for (const area of areas) {
+    const expected = estimate.expectedTotalVotes(area, historical[area.fips]);
+    if (expected) { reportingExpected += expected; totalExpected += expected; }
+  }
+
+  let silentDemPredicted = 0;
+  let silentRepPredicted = 0;
+  // Counties the state has but that haven't reported at all yet are absent
+  // from `areas` entirely (fetch_results.py never writes a row for 0%
+  // counted areas) - this is the only place that gap gets filled back in.
+  for (const [fips, entry] of Object.entries(historical)) {
+    if (fips.slice(0, 2) !== statePrefix || reportingFips.has(fips)) continue;
+    const expected = estimate.expectedTotalVotes(null, entry);
+    if (!expected) continue;
+    totalExpected += expected;
+    silentDemPredicted += expected * entry.demShare;
+    silentRepPredicted += expected * entry.repShare;
+  }
+
+  return {
+    reportingVoteFraction: totalExpected > 0 ? reportingExpected / totalExpected : 1,
+    silentDemPredicted, silentRepPredicted, ballotEstimateOverride: null,
+  };
+}
+
+// historical is this race's parsed historical_<race>.json (or {} if it
+// hasn't loaded yet / doesn't exist) - see loadHistoricalBaseline(). Areas
+// missing from it (no seat-year match, non-county geography, a
+// redistricting-affected district - see races.py) simply aren't in the
+// object, which is exactly the signal estimate.js's fallback path checks for.
+function buildRaceData(rows, race, historical) {
   const dataByKey = new Map();
   const stateAggregates = new Map();
   // Every reporting area of a state, in order, whether or not it can be drawn.
@@ -758,6 +891,11 @@ function buildRaceData(rows, race) {
   // already exists to avoid.
   const groupKeyOf = row => (isDistrictRace(race) ? row["FIPS"] : normalize(row["State"]));
 
+  // Senate/Governor historical baselines are state-level only (MEDSL doesn't
+  // publish county-level returns for those offices) - looked up by state
+  // name, not FIPS, unlike President/House. See build_historical_baseline.py.
+  const historicalKeyOf = area => (RACE_META[race].historicalKey === "state" ? area.stateName : area.fips);
+
   for (const row of rows) {
     const percentIn = parseFloat(row["Percent In"]);
     const totalVotes = +row["Total Votes"];
@@ -766,13 +904,13 @@ function buildRaceData(rows, race) {
 
     const stateKey = groupKeyOf(row);
     const area = {
-      percentIn,
+      percentIn, totalVotes,
       demReal: +row["Democrat Real"],
       repReal: +row["Republican Real"],
-      demPredicted: +row["Democrat Predicted"],
-      repPredicted: +row["Republican Predicted"],
       demName: row["Democrat Name"] || "Democrat",
       repName: row["Republican Name"] || "Republican",
+      stateName: row["State"],
+      fips: row["FIPS"] || null,
     };
     // Keyed by county FIPS, which is exactly the id us-atlas gives its county
     // shapes. Matching on names instead used to paint 10 states wrong - a New
@@ -781,29 +919,67 @@ function buildRaceData(rows, race) {
     // Rows with no FIPS are states reported below county level; they still
     // count towards the state aggregate, they just have nothing to draw.
     area.name = row["Area"];
-    if (row["FIPS"]) dataByKey.set(row["FIPS"], area);
+    if (area.fips) dataByKey.set(area.fips, area);
     if (!areasByState.has(stateKey)) areasByState.set(stateKey, []);
     areasByState.get(stateKey).push(area);
+  }
 
-    // A single county's raw leader and predicted leader can never actually
-    // differ - Predicted is just Real scaled by a constant (100/PercentIn),
-    // which preserves whichever candidate is ahead. The "leader flips after
-    // extrapolation" scenario only shows up once you combine many counties
-    // reporting at different rates, so mismatch/certainty is computed per
-    // STATE, aggregating every populated county row in that state.
-    const agg = stateAggregates.get(stateKey)
-      || { totalExpected: 0, totalVotes: 0, demReal: 0, repReal: 0, demPredicted: 0, repPredicted: 0,
-            geography: row["Geography"] || "counties" };
-    // State-wide and identical on every row of the state, so take it once
-    // rather than summing - summing divided the real reporting percentage by
-    // the county count, and no state ever reached "certain".
-    agg.totalExpected = Math.max(agg.totalExpected, +row["State Total Expected"] || 0);
-    agg.totalVotes += totalVotes;
-    agg.demReal += area.demReal;
-    agg.repReal += area.repReal;
-    agg.demPredicted += area.demPredicted;
-    agg.repPredicted += area.repPredicted;
+  // Second pass: now that every area of a state is known, estimate.js can be
+  // given an honest measure of how much of the STATE's total expected vote
+  // the areas currently reporting actually represent - not just how many of
+  // them there are - see estimate.js's confidenceWeight and
+  // stateHistoricalCoverage below. Then aggregate the now-estimated areas up
+  // to the state.
+  for (const [stateKey, areas] of areasByState) {
+    const { reportingVoteFraction, silentDemPredicted, silentRepPredicted, ballotEstimateOverride } =
+      stateHistoricalCoverage(areas, historical, race, historicalKeyOf);
+    for (const area of areas) {
+      const historicalEntry = historical[historicalKeyOf(area)];
+      Object.assign(area, estimate.estimateArea(area, historicalEntry, reportingVoteFraction));
+    }
+
+    // A single county's raw leader and predicted leader can differ now (they
+    // never could under the old flat-only formula, which was just Real
+    // scaled by a constant) - the historical-swing model can move a county's
+    // own projection past its own raw leader if the swing is strong enough.
+    // Mismatch/certainty is still computed per STATE, aggregating every
+    // populated county row in that state - see stateStatusFor.
+    const agg = { totalExpected: 0, totalVotes: 0, demReal: 0, repReal: 0, demPredicted: 0, repPredicted: 0,
+                  geography: "counties" };
+    for (const area of areas) {
+      agg.totalVotes += area.totalVotes;
+      agg.demReal += area.demReal;
+      agg.repReal += area.repReal;
+      agg.demPredicted += area.demPredicted;
+      agg.repPredicted += area.repPredicted;
+    }
+    // demPredicted/repPredicted deliberately do NOT include silent counties'
+    // historical D/R split - that would be assuming how a county votes
+    // based on zero current-cycle signal, which is exactly the kind of
+    // unfounded assumption this whole model exists to avoid making about
+    // areas that HAVE reported. A state whose predicted total falls well
+    // short of its true size just means most of it hasn't reported yet,
+    // which is honest, not a bug - see ballotEstimate below for the number
+    // that's allowed to use historical data, kept deliberately separate.
+    // ballotEstimateOverride (Senate/Governor only) is the state's single
+    // historical vote total, used directly since there's no per-county
+    // split to build a silent-counties sum from - Math.max guards against
+    // ever showing a total smaller than what's already been counted.
+    agg.ballotEstimate = ballotEstimateOverride != null
+      ? Math.max(ballotEstimateOverride, agg.demPredicted + agg.repPredicted)
+      : agg.demPredicted + agg.repPredicted + silentDemPredicted + silentRepPredicted;
     stateAggregates.set(stateKey, agg);
+  }
+
+  // "State Total Expected" and Geography are identical on every row of a
+  // state, so take them once from the first row rather than summing/joining
+  // in the loop above - summing State Total Expected would double-count it.
+  for (const row of rows) {
+    const stateKey = groupKeyOf(row);
+    const agg = stateAggregates.get(stateKey);
+    if (!agg) continue;
+    agg.totalExpected = Math.max(agg.totalExpected, +row["State Total Expected"] || 0);
+    agg.geography = row["Geography"] || agg.geography;
   }
 
   return { dataByKey, stateAggregates, areasByState };
@@ -814,7 +990,18 @@ function stateStatusFor(current, stateKey) {
   if (!agg) return null;
   const rawLeader = leaderOf(agg.demReal, agg.repReal);
   const predictedLeader = leaderOf(agg.demPredicted, agg.repPredicted);
-  const percentIn = agg.totalExpected > 0 ? (agg.totalVotes / agg.totalExpected) * 100 : 0;
+  // Whichever of NBC's own total (agg.totalExpected) or our own historical-
+  // informed one (agg.ballotEstimate) is bigger - never the smaller of the
+  // two, which would just be whichever source happens to be undercounting.
+  // This is what actually fixed "97% in" for a state where only 3 of its
+  // 44 counties are reporting: generate_mock_data.py's "State Total
+  // Expected" only sums the handful of scripted counties, not the real
+  // state, so without this it agreed with itself and looked done. Real NBC
+  // data shouldn't hit this often (their total_expected already covers the
+  // whole state), but it's a real safety net either way, not just a mock-
+  // data patch.
+  const totalDenominator = Math.max(agg.totalExpected, agg.ballotEstimate);
+  const percentIn = totalDenominator > 0 ? (agg.totalVotes / totalDenominator) * 100 : 0;
   return {
     agg,
     predictedLeader,
@@ -825,7 +1012,7 @@ function stateStatusFor(current, stateKey) {
     // A tie is not a flip: with nothing resolved on one side there is nothing
     // for the extrapolation to disagree with.
     mismatch: rawLeader !== "tie" && predictedLeader !== "tie" && rawLeader !== predictedLeader,
-    certain: Number.isFinite(percentIn) && percentIn >= CERTAIN_THRESHOLD,
+    call: callOf(agg.demReal, agg.repReal, agg.demPredicted, agg.repPredicted, agg.ballotEstimate),
     percentIn: Number.isFinite(percentIn) ? percentIn : 0,
   };
 }
@@ -846,6 +1033,22 @@ function fetchText(url) {
     if (!response.ok) throw new Error(`${response.status} fetching ${url}`);
     return response.text();
   });
+}
+
+// Built once per race by build_historical_baseline.py and essentially fixed
+// for the whole cycle (see server.py's long max-age for it), so it's fetched
+// at most once per race per page load rather than on every 60s CSV refresh -
+// cached here by URL, not just relied on to hit the HTTP cache.
+const _historicalCache = new Map();
+function loadHistoricalBaseline(race) {
+  const url = `${RACE_META[race].historical}?v=${HISTORICAL_DATA_VERSION}`;
+  if (_historicalCache.has(url)) return _historicalCache.get(url);
+  // Missing entirely (build_historical_baseline.py hasn't been run yet) is
+  // not an error - every area just falls back to the flat estimate, which is
+  // exactly today's behaviour before this file exists at all.
+  const promise = fetch(url).then(r => (r.ok ? r.json() : {})).catch(() => ({}));
+  _historicalCache.set(url, promise);
+  return promise;
 }
 
 if (typeof d3 === "undefined" || typeof topojson === "undefined") {
@@ -873,7 +1076,9 @@ function loadRace(race) {
   return Promise.all([
     fetchText(RACE_META[race].csv),
     fetch(metaUrl(race)).then(r => (r.ok ? r.json() : null)).catch(() => null),
-  ]).then(([csvText, meta]) => ({ race, meta, ...buildRaceData(parseRaceCsv(csvText), race) }));
+    loadHistoricalBaseline(race),
+  ]).then(([csvText, meta, historical]) =>
+    ({ race, meta, historical, ...buildRaceData(parseRaceCsv(csvText), race, historical) }));
 }
 
 function start(topology, districtTopology, defaultRaceData) {
@@ -939,7 +1144,7 @@ function start(topology, districtTopology, defaultRaceData) {
   function buildDefs(svgSel, ns, scale) {
     const defs = svgSel.append("defs");
     const tile = HATCH_PX * scale;
-    const hatch = (id, base, line, angle) => {
+    const hatch = (id, base, line, angle, lineWidthRatio = 0.28) => {
       const pattern = defs.append("pattern")
         .attr("id", `${id}-${ns}`)
         .attr("patternUnits", "userSpaceOnUse")
@@ -950,11 +1155,18 @@ function start(topology, districtTopology, defaultRaceData) {
       // outside and is clipped away, and the tiling stops being seamless.
       pattern.append("line")
         .attr("x1", tile / 2).attr("y1", 0).attr("x2", tile / 2).attr("y2", tile)
-        .attr("stroke", line).attr("stroke-width", tile * 0.28);
+        .attr("stroke", line).attr("stroke-width", tile * lineWidthRatio);
     };
     hatch("hatch-dem", COLORS.demProjected, COLORS.demCertain, 45);
     hatch("hatch-rep", COLORS.repProjected, COLORS.repCertain, -45);
     hatch("hatch-none", COLORS.noRace, COLORS.noRaceLine, 45);
+    // Fainter still, for "unprojected" (see callOf): a thin tinted line on
+    // the "no data" grey rather than a dark line on a fully tinted
+    // background - reads as noticeably less confident than the "projected"
+    // hatch above without leaning on colour perception, the same
+    // accessibility goal that hatch pattern already serves.
+    hatch("hatch-dem-faint", COLORS.noData, COLORS.demProjected, 45, 0.16);
+    hatch("hatch-rep-faint", COLORS.noData, COLORS.repProjected, -45, 0.16);
   }
 
   function scaleFor(svgSel, viewBoxWidth) {
@@ -967,24 +1179,34 @@ function start(topology, districtTopology, defaultRaceData) {
   // lighter tint on its own.
   const cvdMode = () => document.documentElement.dataset.palette === "cvd";
 
-  function leaderFill(leader, certain, ns) {
-    if (leader === "D") return certain ? COLORS.demCertain : (cvdMode() ? `url(#hatch-dem-${ns})` : COLORS.demProjected);
-    if (leader === "R") return certain ? COLORS.repCertain : (cvdMode() ? `url(#hatch-rep-${ns})` : COLORS.repProjected);
+  function leaderFill(leader, call, ns) {
+    if (leader === "D") {
+      if (call === "certain") return COLORS.demCertain;
+      if (call === "projected") return cvdMode() ? `url(#hatch-dem-${ns})` : COLORS.demProjected;
+      return cvdMode() ? `url(#hatch-dem-faint-${ns})` : COLORS.demFaint;
+    }
+    if (leader === "R") {
+      if (call === "certain") return COLORS.repCertain;
+      if (call === "projected") return cvdMode() ? `url(#hatch-rep-${ns})` : COLORS.repProjected;
+      return cvdMode() ? `url(#hatch-rep-faint-${ns})` : COLORS.repFaint;
+    }
     return COLORS.noData; // tie, or nothing resolved yet
   }
 
   function stateFill(status, key, ns) {
     if (!hasRace(key)) return `url(#hatch-none-${ns})`;
     if (!status) return COLORS.noData;
-    return leaderFill(status.predictedLeader, status.certain, ns);
+    return leaderFill(status.predictedLeader, status.call, ns);
   }
 
-  // A county's own Percent In tells us whether ITS count is done, separately
-  // from whether its state overall is "certain" - a fully-reported county
-  // inside a barely-reported state should still read as done counting.
+  // A county's own ballot estimate is its own demPredicted+repPredicted -
+  // see estimate.js's expectedTotalVotes, which is exactly what those two
+  // always sum to for an area with any data at all.
   function countyFill(data, ns) {
-    if (!data) return COLORS.noData;
-    return leaderFill(leaderOf(data.demPredicted, data.repPredicted), data.percentIn >= CERTAIN_THRESHOLD, ns);
+    if (!data || data.noData) return COLORS.noData;
+    const ballotEstimate = data.demPredicted + data.repPredicted;
+    const call = callOf(data.demReal, data.repReal, data.demPredicted, data.repPredicted, ballotEstimate);
+    return leaderFill(leaderOf(data.demPredicted, data.repPredicted), call, ns);
   }
 
   // ---------- tooltip ----------
@@ -1020,15 +1242,127 @@ function start(topology, districtTopology, defaultRaceData) {
       stateName,
       stateKey: normalize(stateName || ""),
       data: current.dataByKey.get(feature.id), // feature.id IS the county FIPS
+      // Only meaningful when historicalKey is "fips" - Senate/Governor's
+      // baseline is state-level only (see build_historical_baseline.py), so
+      // there is no per-county number to show for those two races here.
+      historicalEntry: RACE_META[current.race].historicalKey === "fips"
+        ? (current.historical || {})[feature.id] : null,
     };
+  }
+
+  // A county with 0% counted has no row in the CSV at all (fetch_results.py
+  // drops it), so it never reaches estimate.js - there is nothing to
+  // extrapolate from. Showing a number here anyway would read as a
+  // projection when it's really just last cycle's result relabelled - see
+  // the design conversation this shipped from. This is the one thing worth
+  // saying instead: how the area leaned historically, clearly marked as
+  // not a projection.
+  function describeHistoricalLean(entry) {
+    if (!entry) return "No data yet";
+    const leadShare = Math.max(entry.demShare, entry.repShare);
+    const leader = entry.demShare >= entry.repShare ? "D" : "R";
+    const margin = Math.abs(entry.demShare - entry.repShare) * 100;
+    // entry.votes is exactly what estimate.expectedTotalVotes(null, entry)
+    // falls back to for this county elsewhere (the state's total-ballots
+    // figure, the confidence weighting) - showing it here too so the two
+    // numbers are visibly the same estimate, not two different guesses.
+    return `No votes counted yet &middot; ${entry.votes.toLocaleString()} historical ballots<br>`
+      + `Historically leaned ${leader}+${margin.toFixed(0)} in ${entry.year} `
+      + `(${(leadShare * 100).toFixed(0)}% of the two-party vote) &mdash; not a projection`;
+  }
+
+  // The full "show your work" breakdown for an area estimate.js actually
+  // projected - historical baseline, the swing observed so far, how much
+  // that swing is trusted, and what it produced. Only ever called with data
+  // that has a historical baseline (usedFallback: false, noData: false);
+  // the flat-fallback and 0%-counted cases are handled by their own,
+  // simpler tooltip text (see describeHistoricalLean and the flat line
+  // inline below).
+  function describeEstimateBreakdown(data) {
+    const h = data.historical;
+    const swingPts = (data.swing * 100).toFixed(1);
+    const swingDir = data.swing >= 0 ? `+${swingPts}pt D` : `${swingPts}pt D`;
+    const confidencePct = (data.weight * 100).toFixed(0);
+    const remainShare = data.remainingShare;
+    return `Historical baseline (${h.year}): D ${(h.demShare * 100).toFixed(0)}% / R ${(h.repShare * 100).toFixed(0)}%<br>`
+      + `Observed swing so far: ${swingDir} (confidence ${confidencePct}%)<br>`
+      + `Remaining-vote projection: D ${(remainShare.demShare * 100).toFixed(0)}% / R ${(remainShare.repShare * 100).toFixed(0)}%`;
+  }
+
+  // "1.2M", or "~1.2M" if some of the state's counties are neither
+  // reporting nor covered by a historical baseline - in that case the total
+  // is a known UNDERCOUNT (missing counties contribute nothing to it), not
+  // a real one, and that's worth flagging rather than presenting as exact.
+  // Only meaningful for President: Senate/Governor have no per-county
+  // historical baseline to detect a gap against (see
+  // build_historical_baseline.py), and House's rows are whole districts with
+  // no sub-county aggregation at this level - see stateHistoricalCoverage's
+  // own version of this same race-shape split.
+  function ballotTotalLabel(stateKey, agg) {
+    // ballotEstimate, not demPredicted+repPredicted: this is the "how big
+    // will this state's vote be" figure, which may legitimately use
+    // historical data for counties with nothing counted yet - see
+    // buildRaceData's comment on why demPredicted/repPredicted themselves
+    // never do.
+    const formatted = `${(agg.ballotEstimate / 1e6).toFixed(2)}M`;
+    if (RACE_META[current.race].historicalKey !== "fips" || isDistrictRace(current.race)) return formatted;
+
+    const fips = fipsByStateName.get(normalize(stateKey));
+    const countiesInState = fips ? allCounties.filter(c => c.id.slice(0, 2) === fips) : [];
+    if (!countiesInState.length) return formatted; // non-county geography - nothing to check completeness against here either
+
+    const historical = current.historical || {};
+    const complete = countiesInState.every(c => current.dataByKey.has(c.id) || historical[c.id]);
+    return complete ? formatted : `~${formatted}`;
+  }
+
+  // A state with nothing counted at all has no `agg` (buildRaceData never
+  // creates one - see stateStatusFor), so there's no live total to fall back
+  // on here the way ballotTotalLabel does - this sums the state's counties'
+  // historical votes directly, the same number each of those counties' own
+  // "No data yet" tooltip already shows individually (see
+  // describeHistoricalLean).
+  function historicalOnlyBallots(stateKey) {
+    // Senate/Governor (one historical number for the whole state) and
+    // House (one row IS one whole district, keyed the same way as the live
+    // data - its own GEOID) both resolve with a single direct lookup, not
+    // a per-county sum - see stateHistoricalCoverage's identical split.
+    if (RACE_META[current.race].historicalKey === "state" || isDistrictRace(current.race)) {
+      const entry = (current.historical || {})[stateKey];
+      return entry ? `${(entry.votes / 1e6).toFixed(2)}M` : null;
+    }
+    if (RACE_META[current.race].historicalKey !== "fips") return null;
+    const fips = fipsByStateName.get(normalize(stateKey));
+    const countiesInState = fips ? allCounties.filter(c => c.id.slice(0, 2) === fips) : [];
+    if (!countiesInState.length) return null;
+
+    const historical = current.historical || {};
+    let total = 0;
+    let complete = true;
+    for (const c of countiesInState) {
+      const entry = historical[c.id];
+      if (entry) total += entry.votes;
+      else complete = false;
+    }
+    if (total <= 0) return null;
+    const formatted = `${(total / 1e6).toFixed(2)}M`;
+    return complete ? formatted : `~${formatted}`;
   }
 
   function stateSummary(key, status) {
     if (!hasRace(key)) return `No ${RACE_META[current.race].label} race in ${RACE_META[current.race].year}`;
-    if (!status) return "No data yet";
-    if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, tied`;
+    if (!status) {
+      const ballots = historicalOnlyBallots(key);
+      // Plain text, not "&middot;" - this string is also used as an
+      // aria-label attribute value elsewhere, which renders entities
+      // literally instead of decoding them the way tooltip innerHTML does.
+      return ballots ? `No data yet, ${ballots} historical ballots` : "No data yet";
+    }
+    const ballots = ballotTotalLabel(key, status.agg);
+    if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, tied`;
+    if (status.call === "unprojected") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, no projected winner yet`;
     const leaderName = status.predictedLeader === "D" ? "Democrat" : "Republican";
-    return `${status.percentIn.toFixed(0)}% in, ${status.certain ? "certain" : "projected"} ${leaderName}`
+    return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, ${status.call === "certain" ? "certain" : "projected"} ${leaderName}`
       + (status.mismatch ? " (raw leader currently disagrees)" : "");
   }
 
@@ -1042,20 +1376,27 @@ function start(topology, districtTopology, defaultRaceData) {
       .attr("fill", d => countyFill(countyInfo(d).data, ns))
       .attr("d", path)
       .on("mousemove", (event, d) => {
-        const { stateName, stateKey, data } = countyInfo(d);
+        const { stateName, stateKey, data, historicalEntry } = countyInfo(d);
         let html = `<strong>${d.properties.name}, ${stateName || "?"}</strong><br>`;
         if (!data) {
           const status = stateStatus(stateKey);
           html += status && !status.countyLevel
             ? `Reported by ${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}, not by county`
-            : "No data yet";
+            : describeHistoricalLean(historicalEntry);
         } else {
-          const nameOf = leader => (leader === "D" ? data.demName : leader === "R" ? data.repName : "Nobody");
-          html += `${+data.percentIn.toFixed(1)}% in &middot; ${data.percentIn >= CERTAIN_THRESHOLD ? "done counting" : "still counting"}<br>`
-            + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R (${nameOf(leaderOf(data.demReal, data.repReal))} leads)<br>`
-            + `Predicted: ${data.demPredicted.toLocaleString()} D / ${data.repPredicted.toLocaleString()} R (${nameOf(leaderOf(data.demPredicted, data.repPredicted))} projected)`;
-          const status = stateStatus(stateKey);
-          if (status && status.mismatch) html += "<br><strong>State-wide: raw leader &ne; projected winner</strong>";
+          // Total ballots = demPredicted + repPredicted always, whichever
+          // path produced them (self-extrapolated from this county's own
+          // percentIn, or the flat fallback) - both preserve the total, only
+          // the D/R split differs. See estimate.js's expectedTotalVotes.
+          const totalBallots = data.demPredicted + data.repPredicted;
+          html += `${+data.percentIn.toFixed(1)}% in, ${totalBallots.toLocaleString()} total ballots<br>`
+            + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R<br>`;
+          if (data.usedFallback) {
+            html += `No historical baseline for this area &mdash; using live-only estimate<br>`;
+          } else if (data.historical) {
+            html += describeEstimateBreakdown(data) + "<br>";
+          }
+          html += `Predicted total: ${data.demPredicted.toLocaleString()} D / ${data.repPredicted.toLocaleString()} R`;
         }
         showTooltip(event, html);
       })
@@ -1128,8 +1469,13 @@ function start(topology, districtTopology, defaultRaceData) {
 
     for (const [stateName, weight] of Object.entries(meta.weights)) {
       const status = stateStatus(normalize(stateName));
-      if (!status || status.predictedLeader === "tie") { buckets.undecided += weight; continue; }
-      buckets[(status.predictedLeader === "D" ? "dem" : "rep") + (status.certain ? "Certain" : "Projected")] += weight;
+      // "unprojected" joins the tie/no-status case here: nobody's own
+      // projected total has reached a majority, so this weight isn't
+      // attributed to either side yet - see callOf.
+      if (!status || status.predictedLeader === "tie" || status.call === "unprojected") {
+        buckets.undecided += weight; continue;
+      }
+      buckets[(status.predictedLeader === "D" ? "dem" : "rep") + (status.call === "certain" ? "Certain" : "Projected")] += weight;
     }
 
     const demTotal = buckets.demCertain + buckets.demProjected;
@@ -1268,11 +1614,16 @@ function start(topology, districtTopology, defaultRaceData) {
     ];
     const nowTotal = agg.demReal + agg.repReal;
     const projTotal = agg.demPredicted + agg.repPredicted;
-    // Scale against the projected total, not the larger of the two: scaling to
-    // the max always pins the leader's bar to full width, which reads as "100%".
-    // Against the total, the two bars fill the row between them and their
-    // lengths match the percentages printed underneath.
-    const scale = Math.max(projTotal, 1);
+    // Scale the bar WIDTH against the full ballot estimate (which can lean
+    // on historical data for counties with nothing counted yet - see
+    // buildRaceData), not the reporting-only projTotal used for the D/R
+    // split above and the "% projected" text below - those two stay a
+    // partisan share of what's actually been projected, but a bar scaled to
+    // that would always fill its own track completely, reading as "this is
+    // the whole picture" even when most of the state hasn't reported yet.
+    // The grey left over is exactly that gap; the tick marks its halfway
+    // point so the gap has a fixed reference, not just an unlabelled blank.
+    const scale = Math.max(agg.ballotEstimate, 1);
 
     box.html(sides.map(side => {
       const barWidth = pct(side.proj, scale);
@@ -1286,9 +1637,10 @@ function start(topology, districtTopology, defaultRaceData) {
           <span style="color:${side.tint}">${numberFmt(side.proj)}</span>
         </div>
         <div class="cand-bar" role="img"
-             aria-label="${side.label}: ${numberFmt(side.now)} counted, ${numberFmt(side.proj)} projected">
+             aria-label="${side.label}: ${numberFmt(side.now)} counted, ${numberFmt(side.proj)} projected, out of an estimated ${numberFmt(agg.ballotEstimate)} total ballots">
           <div class="counted" style="width:${barWidth * countedShare / 100}%;background:${side.solid}"></div>
           <div class="projected" style="width:${barWidth * (100 - countedShare) / 100}%;background:${side.tint}"></div>
+          <div class="cand-bar-mid" title="Half of the estimated ${numberFmt(agg.ballotEstimate)} total ballots"></div>
         </div>
         <div class="cand-sub">${pct(side.now, nowTotal).toFixed(1)}% of votes counted &middot;
           ${pct(side.proj, projTotal).toFixed(1)}% projected</div>
@@ -1305,7 +1657,12 @@ function start(topology, districtTopology, defaultRaceData) {
     const unit = status && !status.countyLevel
       ? status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
       : "counties";
-    const rows = areas.map(area => `
+    const reportingCount = areas.filter(area => !area.noData).length;
+    const rows = areas.map(area => (area.noData ? `
+      <tr>
+        <td>${area.name}</td>
+        <td colspan="5" class="proj">No data yet</td>
+      </tr>` : `
       <tr>
         <td>${area.name}</td>
         <td>${(+area.percentIn.toFixed(1))}%</td>
@@ -1313,10 +1670,10 @@ function start(topology, districtTopology, defaultRaceData) {
         <td class="proj">${numberFmt(area.demPredicted)}</td>
         <td class="rep-now">${numberFmt(area.repReal)}<span class="proj-inline">${numberFmt(area.repPredicted)}</span></td>
         <td class="proj">${numberFmt(area.repPredicted)}</td>
-      </tr>`).join("");
+      </tr>`)).join("");
 
     d3.select("#overlay-table").html(`
-      <caption>${areas.length} reporting ${unit} &middot; counted, then projected to full reporting</caption>
+      <caption>${reportingCount} of ${areas.length} ${unit} reporting &middot; counted, then projected to full reporting</caption>
       <thead><tr>
         <th scope="col">Area</th><th scope="col">In</th>
         <th scope="col">${names.dem}</th><th scope="col">Proj.</th>
@@ -1348,7 +1705,19 @@ function start(topology, districtTopology, defaultRaceData) {
     };
     const status = stateStatus(stateKey);
     renderOverlaySummary(status, names);
-    renderOverlayTable(current.areasByState.get(stateKey) || [], status, names);
+    // The map already shows every county of the state, reporting or not
+    // (countyFill falls back to "no data" grey) - the table used to only
+    // list reporting ones. Non-county states are the one exception: their
+    // "areas" are townships/wards, not counties, so the county topology
+    // has nothing to merge in for them - see the note below.
+    const reportingAreas = current.areasByState.get(stateKey) || [];
+    const knownFips = new Set(reportingAreas.map(a => a.fips).filter(Boolean));
+    const tableAreas = status && !status.countyLevel
+      ? reportingAreas
+      : reportingAreas.concat(countiesInState
+          .filter(c => !knownFips.has(c.id))
+          .map(c => ({ name: c.properties.name, noData: true })));
+    renderOverlayTable(tableAreas, status, names);
     const note = status && !status.countyLevel
       ? `${stateSummary(stateName, status)} — this state reports by `
         + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()} rather than by county, so there is no county breakdown.`
@@ -1391,18 +1760,20 @@ function start(topology, districtTopology, defaultRaceData) {
 
   function districtSummary(status) {
     if (!status) return "No data yet";
-    if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, tied`;
+    const formatted = `${(status.agg.ballotEstimate / 1e6).toFixed(2)}M`;
+    const ballots = status.agg.allCountiesKnown ? formatted : `~${formatted}`;
+    if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, tied`;
+    if (status.call === "unprojected") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, no projected winner yet`;
     const leaderName = status.predictedLeader === "D" ? "Democrat" : "Republican";
-    return `${status.percentIn.toFixed(0)}% in, ${status.certain ? "certain" : "projected"} ${leaderName}`
+    return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, ${status.call === "certain" ? "certain" : "projected"} ${leaderName}`
       + (status.mismatch ? " (raw leader currently disagrees)" : "");
   }
 
   // A district drill-down's counties are keyed by a Map built fresh from the
   // fetch response, not current.dataByKey (which House never populates - see
   // buildRaceData) - so this is renderCounties' county-fill/tooltip logic
-  // with that one substitution, and "District-wide" instead of "State-wide"
-  // in the mismatch line.
-  function renderDistrictCounties(svgSelection, features, path, ns, dataByKey, status) {
+  // with that one substitution.
+  function renderDistrictCounties(svgSelection, features, path, ns, dataByKey) {
     svgSelection.append("g")
       .selectAll("path")
       .data(features)
@@ -1416,11 +1787,11 @@ function start(topology, districtTopology, defaultRaceData) {
         if (!data) {
           html += "No data yet";
         } else {
-          const nameOf = leader => (leader === "D" ? data.demName : leader === "R" ? data.repName : "Nobody");
-          html += `${+data.percentIn.toFixed(1)}% in &middot; ${data.percentIn >= CERTAIN_THRESHOLD ? "done counting" : "still counting"}<br>`
-            + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R (${nameOf(leaderOf(data.demReal, data.repReal))} leads)<br>`
-            + `Predicted: ${data.demPredicted.toLocaleString()} D / ${data.repPredicted.toLocaleString()} R (${nameOf(leaderOf(data.demPredicted, data.repPredicted))} projected)`;
-          if (status && status.mismatch) html += "<br><strong>District-wide: raw leader &ne; projected winner</strong>";
+          const totalBallots = data.demPredicted + data.repPredicted;
+          html += `${+data.percentIn.toFixed(1)}% in, ${totalBallots.toLocaleString()} total ballots<br>`
+            + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R<br>`
+            + `No county-level historical baseline for House &mdash; using live-only estimate<br>`
+            + `Predicted: ${data.demPredicted.toLocaleString()} D / ${data.repPredicted.toLocaleString()} R`;
         }
         showTooltip(event, html);
       })
@@ -1435,26 +1806,56 @@ function start(topology, districtTopology, defaultRaceData) {
     const label = payload.label || labelOf(feature);
     const names = { dem: payload.demName || "Democrat", rep: payload.repName || "Republican" };
 
+    // The server hands back real counts only (see server.py's
+    // _house_district_payload) - estimate.js projects them the same way it
+    // projects the CSV-sourced areas. There is no county-level historical
+    // baseline for House (MEDSL's House returns are district-level, not
+    // county-level - see build_historical_baseline.py), so every county here
+    // always falls back to the flat estimate; that's a real, documented v1
+    // limitation, not a bug.
+    const areas = payload.areas.map(a => ({
+      ...a,
+      // reportingVoteFraction is irrelevant here (passed as 1): with no
+      // historical entry, estimateArea always takes the flat-fallback
+      // branch, which doesn't look at it.
+      ...estimate.estimateArea(
+        { demReal: a.demReal, repReal: a.repReal, percentIn: a.percentIn, totalVotes: a.votes },
+        undefined, 1),
+    }));
+
     // Same shape stateStatusFor already knows how to read - one synthetic
     // "state" aggregate, built by summing this district's own areas exactly
     // the way buildRaceData sums a state's counties. Skipped entirely when
-    // nothing has reported yet, matching stateStatusFor's own "no aggregate
-    // for this key -> null" convention (a status object built with real
-    // zeros would print "0% in, tied" instead of "No data yet").
-    const status = payload.areas.length ? stateStatusFor({
+    // nothing has reported yet (areas.length alone isn't enough to tell that
+    // any more - it now also counts counties at 0%), matching
+    // stateStatusFor's own "no aggregate for this key -> null" convention (a
+    // status object built with real zeros would print "0% in, tied" instead
+    // of "No data yet").
+    const districtDemPredicted = areas.reduce((sum, a) => sum + a.demPredicted, 0);
+    const districtRepPredicted = areas.reduce((sum, a) => sum + a.repPredicted, 0);
+    const status = areas.some(a => !a.noData) ? stateStatusFor({
       stateAggregates: new Map([[feature.id, {
         totalExpected: payload.totalExpected,
-        totalVotes: payload.areas.reduce((sum, a) => sum + a.votes, 0),
-        demReal: payload.areas.reduce((sum, a) => sum + a.demReal, 0),
-        repReal: payload.areas.reduce((sum, a) => sum + a.repReal, 0),
-        demPredicted: payload.areas.reduce((sum, a) => sum + a.demPredicted, 0),
-        repPredicted: payload.areas.reduce((sum, a) => sum + a.repPredicted, 0),
+        totalVotes: areas.reduce((sum, a) => sum + a.votes, 0),
+        demReal: areas.reduce((sum, a) => sum + a.demReal, 0),
+        repReal: areas.reduce((sum, a) => sum + a.repReal, 0),
+        demPredicted: districtDemPredicted,
+        repPredicted: districtRepPredicted,
         geography: payload.geography,
+        // No per-county historical baseline exists for House (see
+        // build_historical_baseline.py), so a county with nothing counted
+        // yet contributes nothing at all to demPredicted/repPredicted above
+        // - the district's total is a known undercount whenever any county
+        // hasn't reported, not an approximation of one. There's also no
+        // historical fallback to add for ballotEstimate here the way
+        // buildRaceData's own aggregate has - it's just the same total.
+        ballotEstimate: districtDemPredicted + districtRepPredicted,
+        allCountiesKnown: areas.every(a => !a.noData),
       }]]),
     }, feature.id) : null;
 
     renderOverlaySummary(status, names);
-    renderOverlayTable(payload.areas, status, names);
+    renderOverlayTable(areas, status, names);
 
     const note = status && !status.countyLevel
       ? `${districtSummary(status)} — this district reports by `
@@ -1465,14 +1866,19 @@ function start(topology, districtTopology, defaultRaceData) {
 
     stateSvg.selectAll("*").remove();
 
-    const countyIds = new Set(payload.areas.map(a => a.fips).filter(Boolean));
+    const countyIds = new Set(areas.map(a => a.fips).filter(Boolean));
     const countiesInDistrict = allCounties.filter(c => countyIds.has(c.id));
     if (!countiesInDistrict.length) {
       stateSvg.attr("aria-label", `${label}: ${note}`);
       return;
     }
 
-    const dataByKey = new Map(payload.areas.filter(a => a.fips).map(a => [a.fips, {
+    // Areas with nothing counted yet are kept out of dataByKey (not marked
+    // present-but-noData) so the tooltip's existing "no data" branch handles
+    // them, the same way current.dataByKey never carries a 0%-counted county
+    // for the state overlay either - they still get listed in the table
+    // below (renderOverlayTable handles noData rows explicitly there).
+    const dataByKey = new Map(areas.filter(a => a.fips && !a.noData).map(a => [a.fips, {
       percentIn: a.percentIn, demReal: a.demReal, repReal: a.repReal,
       demPredicted: a.demPredicted, repPredicted: a.repPredicted,
       demName: names.dem, repName: names.rep,
@@ -1488,7 +1894,7 @@ function start(topology, districtTopology, defaultRaceData) {
 
     COLORS = snapshotColors();
     buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth));
-    renderDistrictCounties(stateSvg, countiesInDistrict, path, "st", dataByKey, status);
+    renderDistrictCounties(stateSvg, countiesInDistrict, path, "st", dataByKey);
 
     stateSvg.append("path")
       .datum(topojson.mesh(topology, topology.objects.counties, (a, b) => a !== b && countyIds.has(a.id) && countyIds.has(b.id)))

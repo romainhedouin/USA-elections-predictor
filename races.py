@@ -84,6 +84,48 @@ GOVERNOR_STATES_2026 = [
 # districts exist.
 HOUSE_DISTRICTS = json.loads((Path(__file__).parent / "house_districts.json").read_text(encoding="utf-8"))
 
+# Governors mostly serve 4-year terms, but not on a synced clock - New
+# Hampshire and Vermont re-elect theirs every 2 years, and a handful of
+# states vote in odd years (Virginia, New Jersey, Kentucky, Mississippi,
+# Louisiana - none of which are up in 2026, so they don't appear here at
+# all). "Latest year this state actually elected a governor before 2026" is
+# therefore per-state, not a flat "-4" - build_historical_baseline.py needs
+# the real year to know which MEDSL file to pull for each state's baseline.
+_GOVERNOR_TERM_LENGTH = {"New Hampshire": 2, "Vermont": 2}
+GOVERNOR_LAST_ELECTED = {
+    state: 2026 - _GOVERNOR_TERM_LENGTH.get(state, 4) for state in GOVERNOR_STATES_2026
+}
+
+# U.S. Senate seats serve 6-year terms, so a regular seat up in 2026 was last
+# contested in 2020. Florida's and Ohio's 2026 races are specials filling
+# Rubio's and Vance's vacated seats - both were last *regularly* elected in
+# 2022 (Rubio's Class 3 seat, Vance's Class 3 seat), so 2020 would compare
+# against a different election than the one that actually produced today's
+# incumbent. Verified against Wikipedia's "2026 United States Senate
+# elections" and each senator's own election history.
+_SENATE_LAST_CONTESTED_OVERRIDE = {"Florida": 2022, "Ohio": 2022}
+SENATE_LAST_CONTESTED = {
+    state: _SENATE_LAST_CONTESTED_OVERRIDE.get(state, 2020) for state in SENATE_STATES_2026
+}
+
+# States whose U.S. House maps changed after the 2020 redistricting cycle
+# (mid-decade court-ordered redraws used starting with the 2024 elections:
+# Alabama and Louisiana after Voting Rights Act litigation added a second
+# majority-Black district each, North Carolina's and Georgia's legislatures
+# redrew their own maps, New York's court struck down and replaced its 2022
+# map). A district's current GEOID can span different territory than it did
+# in an earlier cycle, so comparing "this district" across those two cycles
+# compares different geography, not a swing. We don't track which individual
+# districts within these states moved how much - conservatively, every
+# district in an affected state is treated as having no valid historical
+# comparator this cycle (build_historical_baseline.py omits them; estimate.js
+# falls back to the flat, non-historical projection for them - see holes #3
+# and #7 in the swing-model design).
+_REDISTRICTING_AFFECTED_STATES = {"Alabama", "Georgia", "Louisiana", "New York", "North Carolina"}
+REDISTRICTING_AFFECTED_DISTRICTS = {
+    geoid for geoid, info in HOUSE_DISTRICTS.items() if info["state"] in _REDISTRICTING_AFFECTED_STATES
+}
+
 # Sanity-check the hand-maintained tables: right totals, no duplicates, and
 # every state spelled the way ELECTORAL_VOTES (and therefore the map's
 # topology join) spells it.
@@ -93,6 +135,11 @@ for _states, _expected in ((SENATE_STATES_2026, 35), (GOVERNOR_STATES_2026, 36))
     assert len(set(_states)) == len(_states), "duplicate state"
     assert set(_states) <= set(ELECTORAL_VOTES), f"unknown state name: {set(_states) - set(ELECTORAL_VOTES)}"
 assert len(HOUSE_DISTRICTS) == 435, f"expected 435 House districts, got {len(HOUSE_DISTRICTS)}"
+assert set(GOVERNOR_LAST_ELECTED) == set(GOVERNOR_STATES_2026)
+assert all(1900 < year < 2026 for year in GOVERNOR_LAST_ELECTED.values())
+assert set(SENATE_LAST_CONTESTED) == set(SENATE_STATES_2026)
+assert all(1900 < year < 2026 for year in SENATE_LAST_CONTESTED.values())
+assert REDISTRICTING_AFFECTED_DISTRICTS <= set(HOUSE_DISTRICTS)
 
 RACES = {
     "president": {
@@ -136,6 +183,12 @@ RACES = {
     },
 }
 
+# President and House are both synced everywhere (every House seat is up
+# every 2 years, all 50 states at once), so these are flat offsets rather
+# than per-state tables - unlike Senate/Governor, which are not.
+PRESIDENT_LAST_ELECTED = RACES["president"]["election_year"] - 4
+HOUSE_LAST_ELECTED = RACES["house"]["election_year"] - 2
+
 
 # The CSV schema every producer writes and map.html reads.
 #
@@ -148,9 +201,13 @@ RACES = {
 # not, and Geography says which case a row is, so the map can join exactly
 # instead of guessing from names and can be honest about the states it cannot
 # break down.
+# No "Predicted" columns: that used to be a flat extrapolation
+# (Real * 100/PercentIn) computed here and written to the CSV, but the
+# projection math (flat or historical-swing) now runs client-side in
+# estimate.js - see map.html. This file writes real counts only.
 CSV_HEADER = [
     "State", "Area", "FIPS", "Geography", "State Total Expected", "Total Votes", "Percent In",
-    "Democrat Real", "Republican Real", "Democrat Predicted", "Republican Predicted",
+    "Democrat Real", "Republican Real",
     "Democrat Name", "Republican Name",
 ]
 

@@ -42,9 +42,9 @@ STUB_DISTRICT = {
     "lastModified": None,
     "areas": [
         {"name": "Butte", "fips": "06007", "percentIn": 100.0, "votes": 92708,
-         "demReal": 41729, "repReal": 50979, "demPredicted": 41729, "repPredicted": 50979},
+         "demReal": 41729, "repReal": 50979},
         {"name": "Colusa", "fips": "06011", "percentIn": 100.0, "votes": 6623,
-         "demReal": 2095, "repReal": 4528, "demPredicted": 2095, "repPredicted": 4528},
+         "demReal": 2095, "repReal": 4528},
     ],
 }
 

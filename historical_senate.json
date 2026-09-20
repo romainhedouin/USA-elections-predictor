@@ -1,0 +1,206 @@
+{
+ "Alabama": {
+  "demShare": 0.39803524587966377,
+  "repShare": 0.6019647541203362,
+  "votes": 2312554,
+  "year": 2020
+ },
+ "Alaska": {
+  "demShare": 0.43320481641853015,
+  "repShare": 0.5667951835814699,
+  "votes": 337180,
+  "year": 2020
+ },
+ "Arkansas": {
+  "demShare": 0.0,
+  "repShare": 1.0,
+  "votes": 793871,
+  "year": 2020
+ },
+ "Colorado": {
+  "demShare": 0.5477158494288753,
+  "repShare": 0.45228415057112464,
+  "votes": 3160606,
+  "year": 2020
+ },
+ "Delaware": {
+  "demShare": 0.6106500257398642,
+  "repShare": 0.38934997426013584,
+  "votes": 477858,
+  "year": 2020
+ },
+ "Florida": {
+  "demShare": 0.41706202502771816,
+  "repShare": 0.5829379749722818,
+  "votes": 7676369,
+  "year": 2022
+ },
+ "Georgia": {
+  "demShare": 0.4908935783488411,
+  "repShare": 0.5091064216511588,
+  "votes": 4837136,
+  "year": 2020
+ },
+ "Idaho": {
+  "demShare": 0.34679186228482,
+  "repShare": 0.6532081377151799,
+  "votes": 824310,
+  "year": 2020
+ },
+ "Illinois": {
+  "demShare": 0.585648710437951,
+  "repShare": 0.41435128956204903,
+  "votes": 5598800,
+  "year": 2020
+ },
+ "Iowa": {
+  "demShare": 0.4660037682361889,
+  "repShare": 0.5339962317638111,
+  "votes": 1619856,
+  "year": 2020
+ },
+ "Kansas": {
+  "demShare": 0.4398103258811905,
+  "repShare": 0.5601896741188095,
+  "votes": 1299492,
+  "year": 2020
+ },
+ "Kentucky": {
+  "demShare": 0.3982572946937214,
+  "repShare": 0.6017427053062786,
+  "votes": 2049572,
+  "year": 2020
+ },
+ "Louisiana": {
+  "demShare": 0.3658090958224073,
+  "repShare": 0.6341909041775927,
+  "votes": 1998280,
+  "year": 2020
+ },
+ "Maine": {
+  "demShare": 0.4539646056574468,
+  "repShare": 0.5460353943425532,
+  "votes": 764868,
+  "year": 2020
+ },
+ "Massachusetts": {
+  "demShare": 0.6668815304106207,
+  "repShare": 0.33311846958937924,
+  "votes": 3535574,
+  "year": 2020
+ },
+ "Michigan": {
+  "demShare": 0.5085864252740616,
+  "repShare": 0.49141357472593833,
+  "votes": 5376801,
+  "year": 2020
+ },
+ "Minnesota": {
+  "demShare": 0.5283972871152139,
+  "repShare": 0.47160271288478606,
+  "votes": 2964667,
+  "year": 2020
+ },
+ "Mississippi": {
+  "demShare": 0.44922380185716215,
+  "repShare": 0.5507761981428378,
+  "votes": 1288202,
+  "year": 2020
+ },
+ "Montana": {
+  "demShare": 0.4498783925024396,
+  "repShare": 0.5501216074975604,
+  "votes": 605637,
+  "year": 2020
+ },
+ "Nebraska": {
+  "demShare": 0.2802412242289977,
+  "repShare": 0.7197587757710022,
+  "votes": 810698,
+  "year": 2020
+ },
+ "New Hampshire": {
+  "demShare": 0.5801466396055635,
+  "repShare": 0.4198533603944366,
+  "votes": 777007,
+  "year": 2020
+ },
+ "New Jersey": {
+  "demShare": 0.5830756981618684,
+  "repShare": 0.41692430183813156,
+  "votes": 4358230,
+  "year": 2020
+ },
+ "New Mexico": {
+  "demShare": 0.5313561770548935,
+  "repShare": 0.46864382294510654,
+  "votes": 892966,
+  "year": 2020
+ },
+ "North Carolina": {
+  "demShare": 0.49086698030374193,
+  "repShare": 0.5091330196962581,
+  "votes": 5235563,
+  "year": 2020
+ },
+ "Ohio": {
+  "demShare": 0.469427725751966,
+  "repShare": 0.530572274248034,
+  "votes": 4131603,
+  "year": 2022
+ },
+ "Oklahoma": {
+  "demShare": 0.34237488943201805,
+  "repShare": 0.6576251105679819,
+  "votes": 1488903,
+  "year": 2020
+ },
+ "Oregon": {
+  "demShare": 0.5913738589822733,
+  "repShare": 0.4086261410177267,
+  "votes": 2233861,
+  "year": 2020
+ },
+ "Rhode Island": {
+  "demShare": 0.6658992479161135,
+  "repShare": 0.33410075208388645,
+  "votes": 493429,
+  "year": 2020
+ },
+ "South Carolina": {
+  "demShare": 0.44792083759246604,
+  "repShare": 0.552079162407534,
+  "votes": 2479965,
+  "year": 2020
+ },
+ "South Dakota": {
+  "demShare": 0.3426475242671083,
+  "repShare": 0.6573524757328917,
+  "votes": 420219,
+  "year": 2020
+ },
+ "Tennessee": {
+  "demShare": 0.3611482719598059,
+  "repShare": 0.6388517280401941,
+  "votes": 2881617,
+  "year": 2020
+ },
+ "Texas": {
+  "demShare": 0.45050478968962326,
+  "repShare": 0.5494952103103767,
+  "votes": 10851747,
+  "year": 2020
+ },
+ "Virginia": {
+  "demShare": 0.5604791420635676,
+  "repShare": 0.43952085793643236,
+  "votes": 4400699,
+  "year": 2020
+ },
+ "West Virginia": {
+  "demShare": 0.27753928339071715,
+  "repShare": 0.7224607166092829,
+  "votes": 757763,
+  "year": 2020
+ }
+}
