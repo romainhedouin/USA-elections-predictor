@@ -52,7 +52,6 @@ geo2topo -q 1e5 -n districts=<( \
       | ndjson-map '(d.id = d.properties.GEOID, d.properties = {name: d.properties.NAMELSAD, state: d.properties.STATEFP}, d)' \
       | geoproject -n 'd3.geoAlbersUsa().scale(1300).translate([487.5, 305])') \
   | toposimplify -f -p 0.25 \
-  | topomerge nation=districts \
   > districts-albers-10m.json
 
 echo "Building house_districts.json"
