@@ -16,9 +16,11 @@ fallback. But it is strictly worse for everyday use:
 - gets no county FIPS, so its output can only be joined to a map by name —
   which is wrong in ten states (see the README's county section)
 
-It also writes the older CSV schema (`County` instead of `Area`, and no
-`FIPS` / `Geography` columns), so `map.html` will not render its output
-without a shim.
+Its CSV header matches `races.CSV_HEADER` (`Area`, `FIPS`, `Geography` and
+all, same as `fetch_results.py` writes) - `map.html` renders it with no
+shim needed. But `FIPS` is always empty and `Geography` is always the
+literal `"counties"`, since the rendered page never exposes either; that's
+the real shape of the FIPS gap called out above, not a missing column.
 
 ```
 python legacy/list_states.py --race senate --nbc-cycle 2024

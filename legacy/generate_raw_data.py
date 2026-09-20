@@ -5,8 +5,12 @@ Two stages, run in order by default:
      table is JS-rendered) and dump each county row's raw HTML to
      states/<race>/<state>/raw_div.txt.
   2. process_all(): parse that raw HTML into raw_data[_<race>].csv, one row
-     per county, including a "predicted final count" that extrapolates each
-     candidate's current vote share to 100% reporting.
+     per county, real vote counts only - the same races.CSV_HEADER schema
+     fetch_results.py writes (State, Area, FIPS, Geography, ...). This
+     scraper never gets a real FIPS or geography label out of the rendered
+     page, so those two columns are always "" / "counties". No "Predicted"
+     columns: extrapolating a candidate's current share to 100% reporting
+     happens client-side in estimate.js (see map.html), never on the server.
 
 --race selects president/senate/governor (races.py). President keeps the
 original unsuffixed nbc_states.json / raw_data.csv names; the scrape cache is
@@ -245,11 +249,16 @@ def process_all(states_dir, output_csv, only=None):
         for result in results:
             by_name = {candidate["name"]: candidate["votes"] for candidate in result["votes"]}
             real = [by_name.get(dem, 0), by_name.get(rep, 0)]
-            predicted = [round(v * 100 / result["percent_in"]) for v in real]
+            # Matches races.CSV_HEADER: State, Area, FIPS, Geography, State
+            # Total Expected, Total Votes, Percent In, Democrat/Republican
+            # Real, Democrat/Republican Name. No FIPS out of the rendered
+            # page (see legacy/README.md), and "counties" is an
+            # approximation - NBC reports a handful of states by township,
+            # parish, etc., which this scraper can't tell apart.
             rows.append(
-                [state_name, result["county_name"], result["state_total_expected"],
-                 result["county_total_votes"], result["percent_in"]]
-                + real + predicted + [dem or "", rep or ""]
+                [state_name, result["county_name"], "", "counties",
+                 result["state_total_expected"], result["county_total_votes"], result["percent_in"]]
+                + real + [dem or "", rep or ""]
             )
 
     if not rows:
