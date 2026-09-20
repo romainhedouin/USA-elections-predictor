@@ -985,6 +985,24 @@ function buildRaceData(rows, race, historical) {
   return { dataByKey, stateAggregates, areasByState };
 }
 
+// A status's non-county Geography ("electionDayVoteCenters") spelled out for
+// display ("election day vote centers") - shared by every place that has to
+// explain why a state or district has no county breakdown.
+function geographyLabel(status) {
+  return status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+}
+
+// The tie/unprojected/leader(/mismatch) tail shared byte-for-byte by
+// stateSummary and districtSummary - everything after they've each worked
+// out their own "ballots" figure (ballotTotalLabel vs. allCountiesKnown).
+function summarizeStatus(status, ballots) {
+  if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, tied`;
+  if (status.call === "unprojected") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, no projected winner yet`;
+  const leaderName = status.predictedLeader === "D" ? "Democrat" : "Republican";
+  return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, ${status.call === "certain" ? "certain" : "projected"} ${leaderName}`
+    + (status.mismatch ? " (raw leader currently disagrees)" : "");
+}
+
 function stateStatusFor(current, stateKey) {
   const agg = current.stateAggregates.get(stateKey);
   if (!agg) return null;
@@ -1098,6 +1116,14 @@ function start(topology, districtTopology, defaultRaceData) {
   );
 
   const allCounties = topojson.feature(topology, topology.objects.counties).features;
+  // A state's own county features - [] for a name with no FIPS match, so
+  // callers never need to guard the lookup themselves. Shared by
+  // ballotTotalLabel, historicalOnlyBallots and openStateOverlay, which all
+  // otherwise repeat this same fips-lookup-then-filter.
+  const countiesOfState = name => {
+    const fips = fipsByStateName.get(normalize(name));
+    return fips ? allCounties.filter(c => c.id.slice(0, 2) === fips) : [];
+  };
   const allStates = topojson.feature(topology, topology.objects.states).features;
   const statesMesh = topojson.mesh(topology, topology.objects.states, (a, b) => a !== b);
 
@@ -1307,8 +1333,7 @@ function start(topology, districtTopology, defaultRaceData) {
     const formatted = `${(agg.ballotEstimate / 1e6).toFixed(2)}M`;
     if (RACE_META[current.race].historicalKey !== "fips" || isDistrictRace(current.race)) return formatted;
 
-    const fips = fipsByStateName.get(normalize(stateKey));
-    const countiesInState = fips ? allCounties.filter(c => c.id.slice(0, 2) === fips) : [];
+    const countiesInState = countiesOfState(stateKey);
     if (!countiesInState.length) return formatted; // non-county geography - nothing to check completeness against here either
 
     const historical = current.historical || {};
@@ -1332,8 +1357,7 @@ function start(topology, districtTopology, defaultRaceData) {
       return entry ? `${(entry.votes / 1e6).toFixed(2)}M` : null;
     }
     if (RACE_META[current.race].historicalKey !== "fips") return null;
-    const fips = fipsByStateName.get(normalize(stateKey));
-    const countiesInState = fips ? allCounties.filter(c => c.id.slice(0, 2) === fips) : [];
+    const countiesInState = countiesOfState(stateKey);
     if (!countiesInState.length) return null;
 
     const historical = current.historical || {};
@@ -1359,11 +1383,7 @@ function start(topology, districtTopology, defaultRaceData) {
       return ballots ? `No data yet, ${ballots} historical ballots` : "No data yet";
     }
     const ballots = ballotTotalLabel(key, status.agg);
-    if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, tied`;
-    if (status.call === "unprojected") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, no projected winner yet`;
-    const leaderName = status.predictedLeader === "D" ? "Democrat" : "Republican";
-    return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, ${status.call === "certain" ? "certain" : "projected"} ${leaderName}`
-      + (status.mismatch ? " (raw leader currently disagrees)" : "");
+    return summarizeStatus(status, ballots);
   }
 
   // ---------- county rendering (used by the drill-down) ----------
@@ -1381,7 +1401,7 @@ function start(topology, districtTopology, defaultRaceData) {
         if (!data) {
           const status = stateStatus(stateKey);
           html += status && !status.countyLevel
-            ? `Reported by ${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}, not by county`
+            ? `Reported by ${geographyLabel(status)}, not by county`
             : describeHistoricalLean(historicalEntry);
         } else {
           // Total ballots = demPredicted + repPredicted always, whichever
@@ -1655,7 +1675,7 @@ function start(topology, districtTopology, defaultRaceData) {
     wrap.style("display", null);
 
     const unit = status && !status.countyLevel
-      ? status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
+      ? geographyLabel(status)
       : "counties";
     const reportingCount = areas.filter(area => !area.noData).length;
     const rows = areas.map(area => (area.noData ? `
@@ -1684,8 +1704,7 @@ function start(topology, districtTopology, defaultRaceData) {
 
   function openStateOverlay(stateFeature) {
     const stateName = stateFeature.properties.name;
-    const fips = fipsByStateName.get(normalize(stateName));
-    const countiesInState = allCounties.filter(c => c.id.slice(0, 2) === fips);
+    const countiesInState = countiesOfState(stateName);
     const countyIds = new Set(countiesInState.map(c => c.id));
 
     stateSvg.selectAll("*").remove();
@@ -1720,7 +1739,7 @@ function start(topology, districtTopology, defaultRaceData) {
     renderOverlayTable(tableAreas, status, names);
     const note = status && !status.countyLevel
       ? `${stateSummary(stateName, status)} — this state reports by `
-        + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()} rather than by county, so there is no county breakdown.`
+        + `${geographyLabel(status)} rather than by county, so there is no county breakdown.`
       : stateSummary(stateName, status);
     d3.select("#overlay-title").text(stateName);
     d3.select("#overlay-note").text(note);
@@ -1762,11 +1781,7 @@ function start(topology, districtTopology, defaultRaceData) {
     if (!status) return "No data yet";
     const formatted = `${(status.agg.ballotEstimate / 1e6).toFixed(2)}M`;
     const ballots = status.agg.allCountiesKnown ? formatted : `~${formatted}`;
-    if (status.predictedLeader === "tie") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, tied`;
-    if (status.call === "unprojected") return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, no projected winner yet`;
-    const leaderName = status.predictedLeader === "D" ? "Democrat" : "Republican";
-    return `${status.percentIn.toFixed(0)}% in, ${ballots} total ballots, ${status.call === "certain" ? "certain" : "projected"} ${leaderName}`
-      + (status.mismatch ? " (raw leader currently disagrees)" : "");
+    return summarizeStatus(status, ballots);
   }
 
   // A district drill-down's counties are keyed by a Map built fresh from the
@@ -1859,7 +1874,7 @@ function start(topology, districtTopology, defaultRaceData) {
 
     const note = status && !status.countyLevel
       ? `${districtSummary(status)} — this district reports by `
-        + `${status.geography.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()} rather than by county, so there is no county map.`
+        + `${geographyLabel(status)} rather than by county, so there is no county map.`
       : districtSummary(status);
     d3.select("#overlay-title").text(label);
     d3.select("#overlay-note").text(note);
