@@ -31,11 +31,10 @@ consumers (e.g. a county map) should already treat as "no data".
 """
 
 import argparse
-import csv
 from pathlib import Path
 
-from fetch_results import write_meta
-from races import CSV_HEADER, HOUSE_DISTRICTS, RACES, race_files
+from fetch_results import write_csv, write_meta
+from races import HOUSE_DISTRICTS, RACES, race_files
 
 # Per-county scenario data, keyed by state name (races.py's weight tables use
 # the same proper names). Each race only uses the subset of these states it
@@ -197,10 +196,7 @@ def main():
             print_state_summary(state_name, state_rows)
             rows.extend(state_rows)
 
-    with open(output_csv, "w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file, delimiter=";")
-        writer.writerow(CSV_HEADER)
-        writer.writerows(rows)
+    write_csv(rows, output_csv)
 
     race = RACES[args.race]
     write_meta(output_csv, args.race, race["nbc_cycle"], rows, source="mock")
