@@ -25,75 +25,42 @@ Commit these to the root of `romainhedouin/USA-elections-predictor`:
 ```
 server.py          # from this scratch dir
 railway.toml       # from this scratch dir
-requirements.txt   # see the merge below
+requirements.txt   # already split; see 1a
 map.html           # already there
 fetch_results.py   # already there (or in progress)
 generate_mock_data.py, races.py   # already there
 ```
 
-### 1a. requirements.txt merge
-
-The repo's current root `requirements.txt` is:
-
-```
-beautifulsoup4==4.12.3
-requests==2.32.3
-selenium==4.26.1
-```
+### 1a. requirements.txt split — already done
 
 Railpack pip-installs the **root** `requirements.txt`, so that file is what the
-deployment gets. Recommended split:
+deployment gets. The root file already carries only what `server.py` and
+`fetch_results.py` need:
 
-```bash
-mkdir -p legacy
-git mv requirements.txt legacy/requirements.txt   # bs4 + selenium live with the code that uses them
-cp requirements-deploy.txt requirements.txt        # root file becomes: requests==2.32.3
+```
+requests==2.32.3
 ```
 
-`server.py` itself needs nothing beyond the stdlib; `requests` is only there
-for `fetch_results.py`. Leaving selenium in the root file is not fatal — it is
-a pure-Python wheel — but it installs a library that can never work in the
-image, because a Railpack container has no Chrome binary.
+`selenium` and `beautifulsoup4` live in `legacy/requirements.txt` instead
+(`pip install -r legacy/requirements.txt` if you need to run the superseded
+scraper), because a Railpack container has no Chrome binary and a Selenium
+install there could never run. This split landed in commit `b083b02`; nothing
+further to do here.
 
-### 1b. Pin the Python version (optional but recommended)
+### 1b. Python version — already pinned
 
-Railpack's default is Python **3.13.2**; pin it so a future default bump cannot
-surprise you. Precedence: `RAILPACK_PYTHON_VERSION` env var → `.python-version`
-/ `.tool-versions` / `mise.toml` → `runtime.txt`. (<https://railpack.com/languages/python/>)
+`.python-version` at the repo root already pins Python to `3.13` (added in
+the same commit, `b083b02`), so a future Railpack default bump can't surprise
+a redeploy. Precedence, for reference: `RAILPACK_PYTHON_VERSION` env var →
+`.python-version` / `.tool-versions` / `mise.toml` → `runtime.txt`.
+(<https://railpack.com/languages/python/>)
 
-```bash
-echo "3.13" > .python-version
-```
+### 1c. `--out-dir` — already supported
 
-### 1c. `generate_mock_data.py` needs `--out-dir` — REQUIRED
-
-**This is the one blocking change.** The current `generate_mock_data.py` has no
-`--out-dir` flag; it writes to the CWD via `race_files(race)["output_csv"]`.
-`server.py` calls it with `--out-dir`, so without this patch the cold-start
-seed fails with `unrecognized arguments: --out-dir` and a fresh volume
-serves nothing. The exact patch (tested):
-
-```python
-# top of file
-import argparse
-import csv
-from pathlib import Path          # <-- add
-
-# in main()
-    parser.add_argument("--race", default="president", choices=RACES.keys())
-    parser.add_argument("--out-dir", default=".",
-                        help="directory to write the CSV into (default: cwd)")   # <-- add
-    args = parser.parse_args()
-    ...
-    out_dir = Path(args.out_dir)                                   # <-- replace
-    out_dir.mkdir(parents=True, exist_ok=True)                     # <-- the single
-    output_csv = out_dir / race_files(args.race)["output_csv"].name  # <-- output_csv line
-```
-
-`fetch_results.py` must honour `--out-dir` the same way. `server.py` detects a
-CLI that silently ignores the flag and logs
-`exited 0 but wrote no raw_data.csv (does it support --out-dir?)` rather than
-serving a stale file forever without explanation.
+Both `fetch_results.py` and `generate_mock_data.py` already accept `--out-dir`
+(added in commit `2ea3110`, the same commit that introduced `server.py`), so
+`server.py`'s calls into either CLI write straight onto the mounted volume.
+No patch needed here.
 
 ### 1d. No Procfile — deliberately
 
