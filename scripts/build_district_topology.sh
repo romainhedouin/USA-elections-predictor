@@ -21,13 +21,13 @@
 # voting member, so they have no seat for this map's purposes (the same
 # reasoning races.py already applies to president/governor).
 #
-#   ./build_district_topology.sh
+#   ./scripts/build_district_topology.sh
 #
 # Requires: curl, unzip, node/npx (installs its own toolchain into a scratch
 # node_modules the first time it runs).
 
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/../static"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

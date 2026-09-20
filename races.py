@@ -79,10 +79,10 @@ GOVERNOR_STATES_2026 = [
 ]
 
 # (district GEOID) -> {"state": ..., "label": ...}. Built once by
-# build_district_topology.sh from the same Census shapefile the district map
+# scripts/build_district_topology.sh from the same Census shapefile the district map
 # boundaries come from, so the two can never disagree about which 435
 # districts exist.
-HOUSE_DISTRICTS = json.loads((Path(__file__).parent / "house_districts.json").read_text(encoding="utf-8"))
+HOUSE_DISTRICTS = json.loads((Path(__file__).parent / "static" / "house_districts.json").read_text(encoding="utf-8"))
 
 # Governors mostly serve 4-year terms, but not on a synced clock - New
 # Hampshire and Vermont re-elect theirs every 2 years, and a handful of

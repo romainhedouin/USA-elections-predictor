@@ -598,7 +598,7 @@ const TOPOLOGY_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-albers-10
 // exists anywhere on npm/jsDelivr. This is a same-origin file built once by
 // build_district_topology.sh from the Census cd119 shapefile, reprojected
 // into the exact Albers USA us-atlas itself uses so the two line up.
-const DISTRICT_TOPOLOGY_URL = "districts-albers-10m.json";
+const DISTRICT_TOPOLOGY_URL = "static/districts-albers-10m.json";
 // Bump this whenever historical_<race>.json is regenerated. A response
 // header change (even Cache-Control: no-cache) doesn't invalidate what a
 // browser already has cached from an earlier load under the old, much
@@ -619,7 +619,7 @@ const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
 const RACE_META = {
   president: {
     label: "President", unit: "electoral vote", year: 2028, csv: "raw_data.csv",
-    historical: "historical_president.json", historicalKey: "fips",
+    historical: "static/historical_president.json", historicalKey: "fips",
     winNote: "270 of 538 to win",
     weights: {
       Alabama: 9, Alaska: 3, Arizona: 11, Arkansas: 6, California: 54, Colorado: 10, Connecticut: 7,
@@ -634,7 +634,7 @@ const RACE_META = {
   },
   senate: {
     label: "Senate", unit: "seat", year: 2026, csv: "raw_data_senate.csv",
-    historical: "historical_senate.json", historicalKey: "state",
+    historical: "static/historical_senate.json", historicalKey: "state",
     // Only 35 of 100 seats are on the ballot, so a seat count off this map is
     // not a chamber count - say so rather than implying otherwise.
     winNote: "51 of 100 for control &middot; the 65 seats not up this cycle aren't shown",
@@ -648,7 +648,7 @@ const RACE_META = {
   },
   governor: {
     label: "Governor", unit: "governorship", year: 2026, csv: "raw_data_governor.csv",
-    historical: "historical_governor.json", historicalKey: "state",
+    historical: "static/historical_governor.json", historicalKey: "state",
     winNote: "36 of 50 governorships on the ballot",
     weights: Object.fromEntries([
       "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Florida",
@@ -660,7 +660,7 @@ const RACE_META = {
   },
   house: {
     label: "House", unit: "seat", year: 2026, csv: "raw_data_house.csv",
-    historical: "historical_house.json", historicalKey: "fips",
+    historical: "static/historical_house.json", historicalKey: "fips",
     winNote: "218 of 435 for control",
     // Marks this race as keyed by district GEOID rather than by state name -
     // every other function that branches on "is this House" checks this

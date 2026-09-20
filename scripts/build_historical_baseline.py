@@ -1,16 +1,14 @@
 """Build historical_<race>.json: the prior-cycle baseline estimate.js needs
-to turn a flat extrapolation into a swing-adjusted one (see
-`/Users/romainhedouin/.claude/plans/reconsider-this-calculation-try-noble-valiant.md`
-for the full design and the holes this addresses).
+to turn a flat extrapolation into a swing-adjusted one.
 
 Run once per redistricting/data refresh, like build_fips_table.py and
 build_district_topology.sh - this is not part of the regular fetch_results.py
 refresh loop.
 
-    python build_historical_baseline.py --race president --input countypres.csv
-    python build_historical_baseline.py --race house --input house.csv
-    python build_historical_baseline.py --race senate --input senate.csv
-    python build_historical_baseline.py --race governor --input governor.csv
+    python scripts/build_historical_baseline.py --race president --input countypres.csv
+    python scripts/build_historical_baseline.py --race house --input house.csv
+    python scripts/build_historical_baseline.py --race senate --input senate.csv
+    python scripts/build_historical_baseline.py --race governor --input governor.csv
 
 DATA SOURCES:
   --format medsl (default): MIT Election Data and Science Lab (MEDSL),
@@ -75,8 +73,10 @@ codebook before relying on this - Dataverse has revised these before):
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from races import (
     GOVERNOR_LAST_ELECTED,
     HOUSE_DISTRICTS,
@@ -414,7 +414,7 @@ def main():
     else:
         baseline = statewide_baseline(rows, "GOVERNOR", GOVERNOR_LAST_ELECTED)
 
-    output = args.output or Path(f"historical_{args.race}.json")
+    output = args.output or Path(__file__).resolve().parent.parent / "static" / f"historical_{args.race}.json"
     output.write_text(json.dumps(baseline, indent=1, sort_keys=True), encoding="utf-8")
     print(f"wrote {len(baseline)} areas to {output}")
 

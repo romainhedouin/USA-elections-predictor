@@ -43,12 +43,12 @@ COUNTY_GEOGRAPHIES = {"counties", "parishes"}
 # (state slug) -> {NBC area name: 5-digit FIPS}. Built once by
 # build_fips_table.py; see that script for why this is a table and not a
 # name match done at runtime.
-FIPS_TABLE = json.loads((Path(__file__).parent / "county_fips.json").read_text(encoding="utf-8"))
+FIPS_TABLE = json.loads((Path(__file__).parent / "static" / "county_fips.json").read_text(encoding="utf-8"))
 
-# (district GEOID) -> {state, label}. Built once by build_district_topology.sh
+# (district GEOID) -> {state, label}. Built once by scripts/build_district_topology.sh
 # from the Census shapefile - see that script. Used here only to fix up NBC's
 # at-large district numbering (see _fix_at_large_geoid below).
-_HOUSE_DISTRICTS = json.loads((Path(__file__).parent / "house_districts.json").read_text(encoding="utf-8"))
+_HOUSE_DISTRICTS = json.loads((Path(__file__).parent / "static" / "house_districts.json").read_text(encoding="utf-8"))
 
 # The Census GEOID standard - what the district topology and house_districts
 # table both use - numbers an at-large state's lone district "00". NBC's own

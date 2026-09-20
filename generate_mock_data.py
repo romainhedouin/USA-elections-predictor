@@ -1,6 +1,6 @@
 """Generate a fictional raw_data[_<race>].csv exercising the extrapolation mechanic.
 
-Writes the same schema generate_raw_data.py produces, so it's a drop-in
+Writes the same schema fetch_results.py produces, so it's a drop-in
 stand-in for testing or visualization.
 
 Candidate names are the generic "Democrat"/"Republican" placeholders since

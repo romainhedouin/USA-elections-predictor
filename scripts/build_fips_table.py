@@ -24,16 +24,19 @@ settled cycle, and freeze the answer. At runtime it is then a dictionary
 lookup by name, which is stable and needs no votes - important, because on
 election night every county starts at zero and vote vectors are useless.
 
-    python build_fips_table.py [--cycle 2024] [--race president]
+    python scripts/build_fips_table.py [--cycle 2024] [--race president]
 """
 
 import argparse
 import json
+import sys
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from nbc_api import BASE_URL, COUNTY_GEOGRAPHIES, _get, state_slugs
 
-OUTPUT = "county_fips.json"
+OUTPUT = Path(__file__).resolve().parent.parent / "static" / "county_fips.json"
 
 
 def state_table(state_slug, race_slug, cycle):

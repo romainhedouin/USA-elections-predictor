@@ -80,6 +80,11 @@ from races import RACES as RACE_CONFIG
 # into the image at build time and is NOT the volume.
 REPO_DIR = Path(__file__).resolve().parent
 
+# Checked-in reference data (county FIPS lookup, district topology, historical
+# baselines) that map.html fetches over HTTP. Distinct from DATA_DIR below,
+# which holds the CSVs a refresh overwrites.
+STATIC_DATA_DIR = REPO_DIR / "static"
+
 PORT = int(os.environ.get("PORT", "8000"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", REPO_DIR / "data")).resolve()
 REFRESH_SECONDS = max(30, int(os.environ.get("REFRESH_SECONDS", "900")))
@@ -139,7 +144,7 @@ def meta_name(race):
     return csv_name(race).replace(".csv", ".meta.json")
 
 
-CSV_NAMES = {csv_name(r) for r in ALL_RACES}  # serve all three, refresh only RACES
+CSV_NAMES = {csv_name(r) for r in ALL_RACES}  # every race is servable; only RACES gets refreshed
 # The sidecars fetch_results.py writes next to each CSV. map.html reads them to
 # say whether it is showing real results or fixtures, and how stale they are.
 # They live on the volume with the CSVs, NOT in the repo, so they have to be
@@ -375,7 +380,6 @@ def scheduler_loop():
     night is a silently frozen map.
     """
     if not REFRESH_ENABLED:
-        # Paused: keep serving whatever is on the volume, fetch nothing.
         log.warning("scheduler PAUSED (REFRESH_ENABLED=0) - serving existing "
                     "data, not fetching. Unset it to resume.")
         return
@@ -409,6 +413,9 @@ STATIC_TYPES = {
     ".ico": "image/x-icon",
 }
 SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
+# Same character class as SAFE_NAME, one directory level down - the only
+# subdirectory this server ever serves out of, so no general traversal logic.
+SAFE_STATIC_PATH = re.compile(r"^static/[A-Za-z0-9._-]+$")
 
 # path -> (mtime_ns, bytes). Bounded by construction: only CSV/meta/static
 # paths the router already whitelists ever get read, so at most a handful of
@@ -645,6 +652,24 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(code, body, "application/json; charset=utf-8",
                               {"Cache-Control": "no-store"}, head_only)
 
+        # /static/<file>: checked-in reference data (county FIPS, district
+        # topology, historical baselines). One fixed directory level, same
+        # character class as SAFE_NAME below it, so this can't walk anywhere
+        # else.
+        if SAFE_STATIC_PATH.match(name):
+            filename = name.split("/", 1)[1]
+            suffix = Path(filename).suffix.lower()
+            candidate = STATIC_DATA_DIR / filename
+            if suffix in STATIC_TYPES and candidate.is_file():
+                # historical_<race>.json is rebuilt by
+                # scripts/build_historical_baseline.py, rarely in production
+                # but often during development - no-cache avoids a stale copy
+                # surviving a hard refresh through an intermediate proxy.
+                cache = "no-cache" if filename.startswith("historical_") else "public, max-age=300"
+                return self._send_file(candidate, STATIC_TYPES[suffix],
+                                       {"Cache-Control": cache}, head_only)
+            return self._not_found(head_only)
+
         # Anything else must be a plain filename - no slashes, no "..", so
         # there is no way to walk out of the directories we intend to serve.
         if not SAFE_NAME.match(name):
@@ -666,21 +691,8 @@ class Handler(BaseHTTPRequestHandler):
         if suffix in STATIC_TYPES:
             candidate = REPO_DIR / name
             if candidate.is_file():
-                # historical_<race>.json is a per-cycle build artifact (see
-                # build_historical_baseline.py) that only changes when someone
-                # reruns that script - in production that's rare enough to
-                # cache hard. Forced to no-cache for now instead: while this
-                # file is being actively rebuilt during development, a long
-                # max-age is exactly what makes an intermediate proxy/tunnel
-                # keep serving a stale copy through what looks like a normal
-                # hard refresh (a client's no-cache request header isn't
-                # guaranteed to reach past every such proxy, but no-cache on
-                # the RESPONSE forces a revalidation round-trip regardless).
-                # Switch back to a long max-age once the data stops changing
-                # day to day.
-                cache = "no-cache" if name.startswith("historical_") else "public, max-age=300"
                 return self._send_file(candidate, STATIC_TYPES[suffix],
-                                       {"Cache-Control": cache}, head_only)
+                                       {"Cache-Control": "public, max-age=300"}, head_only)
         return self._not_found(head_only)
 
     def do_GET(self):

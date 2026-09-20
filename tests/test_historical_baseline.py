@@ -1,4 +1,4 @@
-"""Unit tests for build_historical_baseline.py's pure join/aggregation
+"""Unit tests for scripts/build_historical_baseline.py's pure join/aggregation
 logic. Plain pytest, no Selenium/browser - unlike the rest of tests/, this
 module has no rendering to check.
 """
@@ -6,7 +6,9 @@ module has no rendering to check.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO))
+sys.path.insert(0, str(REPO / "scripts"))
 
 import build_historical_baseline as bhb
 import races
