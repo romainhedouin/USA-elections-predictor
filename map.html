@@ -72,7 +72,7 @@
        is then sized to fill whatever is left, so the whole thing lands on one
        screen. Lower it for a bigger map plus a little scroll, raise it to
        guarantee none. */
-    --map-chrome: 25rem;
+    --map-chrome: 26.1rem;
   }
 
   /* Colour-blind mode. The light tints above sit almost entirely on the
@@ -427,7 +427,7 @@
   @media (max-width: 860px) {
     /* The tabs drop below the title here, so the map has less height to work
        with - measured, not guessed: see tests/test_layout.py. */
-    :root { --map-chrome: 33rem; }
+    :root { --map-chrome: 34.5rem; }
     header { display: block; margin-bottom: 1rem; }
     header .titles { margin-bottom: 0.85rem; }
     /* Tabs get their own row; the two toggles share the next one. Stacking all
@@ -442,33 +442,33 @@
   @media (max-width: 640px) {
     /* Squeeze the chrome, not the map: on a 360px phone the header, legend and
        scoreboard together were pushing the page 64px past the fold. */
-    .page { padding-top: 1rem; padding-bottom: 0.75rem; }
-    header { margin-bottom: 0.75rem; }
-    header .titles { margin-bottom: 0.6rem; }
+    .page { padding-top: 1rem; padding-bottom: 0.5rem; }
+    header { margin-bottom: 0.5rem; }
+    header .titles { margin-bottom: 0.4rem; }
     header p.subtitle { font-size: 0.8rem; line-height: 1.35; }
-    .card { padding: 0.8rem clamp(0.9rem, 3vw, 1.5rem); }
+    .card { padding: 0.6rem clamp(0.9rem, 3vw, 1.5rem); }
     .score-card { margin-top: 0.85rem; }
     .scoreboard { gap: 0.5rem 1rem; }
 
     /* The map is the product: put it directly under the header and push the
        scoreboard below it, rather than burying it under 700px of chrome. */
     .map-card   { order: 2; }
-    .score-card { order: 3; margin-top: 1.25rem; margin-bottom: 0; }
+    .score-card { order: 3; margin-top: 1rem; margin-bottom: 0; }
 
     /* Full-bleed the map card to reclaim the page gutters. */
     .map-card {
       margin-inline: calc(-1 * clamp(0.75rem, 3vw, 1.5rem));
       border-radius: 0; border-left: none; border-right: none;
-      padding: 0.75rem clamp(0.75rem, 3vw, 1.5rem);
+      padding: 0.55rem clamp(0.75rem, 3vw, 1.5rem);
     }
-    .map-hint { font-size: 0.78rem; margin-bottom: 0.5rem; }
+    .map-hint { font-size: 0.78rem; margin-bottom: 0.35rem; }
     .hint-long { display: none; }
     #map { width: 100%; }
 
     #legend {
       display: grid; grid-template-columns: 1fr 1fr;
-      gap: 0.28rem 0.6rem; font-size: 0.72rem;
-      margin-top: 0.6rem; padding-top: 0.6rem;
+      gap: 0.18rem 0.6rem; font-size: 0.72rem;
+      margin-top: 0.4rem; padding-top: 0.4rem;
     }
     #legend i { width: 13px; height: 13px; }
     #legend .legend-wide { grid-column: 1 / -1; }
