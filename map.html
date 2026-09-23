@@ -349,8 +349,6 @@
   }
   #overlay.open { display: flex; }
 
-  /* --vb-ratio is the open state's own aspect ratio, set from JS, so the panel
-     hugs the state instead of letterboxing a tall state in a wide box. */
   #overlay-panel {
     --map-cap: clamp(190px, 32svh, 320px);
     background: var(--panel-bg);
@@ -447,7 +445,6 @@
     header .titles { margin-bottom: 0.4rem; }
     header p.subtitle { font-size: 0.8rem; line-height: 1.35; }
     .card { padding: 0.6rem clamp(0.9rem, 3vw, 1.5rem); }
-    .score-card { margin-top: 0.85rem; }
     .scoreboard { gap: 0.5rem 1rem; }
 
     /* The map is the product: put it directly under the header and push the
@@ -479,7 +476,7 @@
   @media (max-width: 640px), (max-height: 520px) {
     #overlay { align-items: flex-end; justify-content: center; }
     #overlay-panel {
-      max-width: none; width: 100%; min-width: 0;
+      width: 100%; min-width: 0;
       height: min(90dvh, 100dvh - 3.5rem); max-height: none;
       border-radius: 18px 18px 0 0; border-bottom: none; transform: none;
       padding: 0.85rem clamp(0.75rem, 3vw, 1rem) calc(0.85rem + env(safe-area-inset-bottom));
@@ -501,7 +498,6 @@
        scroll context for the whole sheet, not a scroller inside a scroller. */
     #overlay-panel { overflow-y: auto; -webkit-overflow-scrolling: touch; }
     #state-map { flex: none; width: 100%; height: clamp(170px, 26svh, 250px); }
-    #overlay-table-wrap { max-height: none; overflow: visible; }
     #overlay-table thead th { top: -1px; }
     /* Six columns do not fit 360px, and letting the table scroll sideways
        would drag the whole sheet with it. Fold each projection under the
@@ -606,7 +602,7 @@ const DISTRICT_TOPOLOGY_URL = "static/districts-albers-10m.json";
 // a fetch() call the way it does for the page's own declared resources.
 // Changing the URL is the one thing that's guaranteed to miss any stale
 // cache entry, browser or intermediate proxy, no matter how it got stale.
-const HISTORICAL_DATA_VERSION = 4;
+const HISTORICAL_DATA_VERSION = 5;
 const HATCH_PX = 5;           // hatch tile size, in screen pixels, for "projected" fills
 const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
 
@@ -796,16 +792,8 @@ function parseRaceCsv(text) {
 
 window.__mapTest.clampToViewport = clampToViewport;
 
-// Fraction (0-1) of a state's total expected vote (reporting + not-yet-
-// reporting) that the areas in `areas` account for - see estimate.js's
-// expectedTotalVotes for how a not-yet-reporting county's size is estimated
-// from its historical total. Only meaningful where a "state" group can
-// contain multiple counties with genuinely independent historical baselines
-// - President. House's groups are one district each (a district's own
-// remaining vote never borrows confidence from sibling districts), and
-// Senate/Governor's baseline has no per-county granularity to weigh against
-// in the first place (see build_historical_baseline.py) - both simply trust
-// whatever percentIn on its own already indicates.
+const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 // Two things map.html can't get from any single area, both answered by the
 // same question - "which of this state's counties does the caller not have
 // live data for, and what does history say they're worth?":
@@ -821,6 +809,21 @@ window.__mapTest.clampToViewport = clampToViewport;
 //     makes the bars look far more complete than they are. A silent
 //     county's historical result, scaled to its historical size, is the
 //     best estimate available until it actually reports.
+const _historicalByPrefix = new WeakMap();
+function historicalByPrefix(historical) {
+  let m = _historicalByPrefix.get(historical);
+  if (!m) {
+    m = new Map();
+    for (const [fips, entry] of Object.entries(historical)) {
+      const p = fips.slice(0, 2);
+      if (!m.has(p)) m.set(p, []);
+      m.get(p).push([fips, entry]);
+    }
+    _historicalByPrefix.set(historical, m);
+  }
+  return m;
+}
+
 function stateHistoricalCoverage(areas, historical, race, historicalKeyOf) {
   const nothingToWeighAgainst = { reportingVoteFraction: 1, silentDemPredicted: 0, silentRepPredicted: 0, ballotEstimateOverride: null };
   // Senate/Governor (one historical value for the whole state) and House's
@@ -853,8 +856,8 @@ function stateHistoricalCoverage(areas, historical, race, historicalKeyOf) {
   // Counties the state has but that haven't reported at all yet are absent
   // from `areas` entirely (fetch_results.py never writes a row for 0%
   // counted areas) - this is the only place that gap gets filled back in.
-  for (const [fips, entry] of Object.entries(historical)) {
-    if (fips.slice(0, 2) !== statePrefix || reportingFips.has(fips)) continue;
+  for (const [fips, entry] of historicalByPrefix(historical).get(statePrefix) || []) {
+    if (reportingFips.has(fips)) continue;
     const expected = estimate.expectedTotalVotes(null, entry);
     if (!expected) continue;
     totalExpected += expected;
@@ -1054,17 +1057,22 @@ function fetchText(url) {
 }
 
 // Built once per race by build_historical_baseline.py and essentially fixed
-// for the whole cycle (see server.py's long max-age for it), so it's fetched
-// at most once per race per page load rather than on every 60s CSV refresh -
-// cached here by URL, not just relied on to hit the HTTP cache.
+// for the whole cycle, so it's fetched at most once per race per page load
+// rather than on every 60s CSV refresh - cached here by URL (server.py sends
+// it no-cache, revalidated with a 304).
 const _historicalCache = new Map();
+const NO_HISTORICAL = {}; // one shared object, so a failed retry never looks like new data
 function loadHistoricalBaseline(race) {
   const url = `${RACE_META[race].historical}?v=${HISTORICAL_DATA_VERSION}`;
   if (_historicalCache.has(url)) return _historicalCache.get(url);
   // Missing entirely (build_historical_baseline.py hasn't been run yet) is
-  // not an error - every area just falls back to the flat estimate, which is
-  // exactly today's behaviour before this file exists at all.
-  const promise = fetch(url).then(r => (r.ok ? r.json() : {})).catch(() => ({}));
+  // not an error - every area just falls back to the flat estimate. Any other
+  // failure is dropped from the cache so the next refresh retries it.
+  const promise = fetch(url).then(r => {
+    if (r.status === 404) return {};
+    if (!r.ok) throw new Error(`${r.status} fetching ${url}`);
+    return r.json();
+  }).catch(() => { _historicalCache.delete(url); return NO_HISTORICAL; });
   _historicalCache.set(url, promise);
   return promise;
 }
@@ -1090,13 +1098,16 @@ if (typeof d3 === "undefined" || typeof topojson === "undefined") {
 
 // A race's CSV plus its metadata sidecar. The sidecar is optional: an older
 // pipeline, or a hand-made CSV, should still render.
-function loadRace(race) {
+// Passing the previous load as `prev` reuses its parsed data when nothing changed.
+function loadRace(race, prev) {
   return Promise.all([
     fetchText(RACE_META[race].csv),
     fetch(metaUrl(race)).then(r => (r.ok ? r.json() : null)).catch(() => null),
     loadHistoricalBaseline(race),
   ]).then(([csvText, meta, historical]) =>
-    ({ race, meta, historical, ...buildRaceData(parseRaceCsv(csvText), race, historical) }));
+    (prev && prev.race === race && prev.csvText === csvText && prev.historical === historical
+      ? { ...prev, meta, unchanged: true }
+      : { race, meta, historical, csvText, ...buildRaceData(parseRaceCsv(csvText), race, historical) }));
 }
 
 function start(topology, districtTopology, defaultRaceData) {
@@ -1120,9 +1131,10 @@ function start(topology, districtTopology, defaultRaceData) {
   // callers never need to guard the lookup themselves. Shared by
   // ballotTotalLabel, historicalOnlyBallots and openStateOverlay, which all
   // otherwise repeat this same fips-lookup-then-filter.
+  const countiesByStateFips = d3.group(allCounties, c => c.id.slice(0, 2));
   const countiesOfState = name => {
     const fips = fipsByStateName.get(normalize(name));
-    return fips ? allCounties.filter(c => c.id.slice(0, 2) === fips) : [];
+    return (fips && countiesByStateFips.get(fips)) || [];
   };
   const allStates = topojson.feature(topology, topology.objects.states).features;
   const statesMesh = topojson.mesh(topology, topology.objects.states, (a, b) => a !== b);
@@ -1195,9 +1207,10 @@ function start(topology, districtTopology, defaultRaceData) {
     hatch("hatch-rep-faint", COLORS.noData, COLORS.repProjected, -45, 0.16);
   }
 
-  function scaleFor(svgSel, viewBoxWidth) {
-    const width = svgSel.node().getBoundingClientRect().width;
-    return width > 0 ? viewBoxWidth / width : 1;
+  // Default preserveAspectRatio (meet): the tighter axis sets the scale.
+  function scaleFor(svgSel, vbW, vbH) {
+    const r = svgSel.node().getBoundingClientRect();
+    return r.width > 0 && r.height > 0 ? Math.max(vbW / r.width, vbH / r.height) : 1;
   }
 
   // The hatch is a redundant, non-colour encoding of "still counting". It is
@@ -1237,13 +1250,18 @@ function start(topology, districtTopology, defaultRaceData) {
 
   // ---------- tooltip ----------
   let touchTooltipTimer;
+  const hoverMQ = window.matchMedia("(hover: hover)");
+  let lastHtml = null, lastW = 0, lastH = 0;
   function showTooltip(event, html) {
     clearTimeout(touchTooltipTimer);
-    // Park it at the origin before measuring: at its previous position the
-    // shrink-to-fit width is clamped by the remaining space, not the content.
-    const node = tooltip.style("display", "block").style("left", "0px").style("top", "0px").html(html).node();
+    if (html !== lastHtml) {
+      // Park it at the origin before measuring: at its previous position the
+      // shrink-to-fit width is clamped by the remaining space, not the content.
+      const node = tooltip.style("display", "block").style("left", "0px").style("top", "0px").html(html).node();
+      lastHtml = html; lastW = node.offsetWidth; lastH = node.offsetHeight;
+    }
     const place = clampToViewport(
-      event.clientX, event.clientY, node.offsetWidth, node.offsetHeight,
+      event.clientX, event.clientY, lastW, lastH,
       document.documentElement.clientWidth, document.documentElement.clientHeight
     );
     // clientX/Y are viewport-relative; the tooltip is positioned against the
@@ -1253,11 +1271,11 @@ function start(topology, districtTopology, defaultRaceData) {
       .style("top", (place.y + window.scrollY) + "px");
     // A tap synthesises a mousemove, so touch users get a tooltip with no
     // pointerleave to ever dismiss it. Time it out instead of stranding it.
-    if (!window.matchMedia("(hover: hover)").matches) {
+    if (!hoverMQ.matches) {
       touchTooltipTimer = setTimeout(hideTooltip, 2500);
     }
   }
-  const hideTooltip = () => tooltip.style("display", "none");
+  const hideTooltip = () => { lastHtml = null; tooltip.style("display", "none"); };
   document.addEventListener("pointerdown", event => {
     if (!event.target.closest("path.state, path.county")) hideTooltip();
   });
@@ -1356,7 +1374,6 @@ function start(topology, districtTopology, defaultRaceData) {
       const entry = (current.historical || {})[stateKey];
       return entry ? `${(entry.votes / 1e6).toFixed(2)}M` : null;
     }
-    if (RACE_META[current.race].historicalKey !== "fips") return null;
     const countiesInState = countiesOfState(stateKey);
     if (!countiesInState.length) return null;
 
@@ -1397,7 +1414,7 @@ function start(topology, districtTopology, defaultRaceData) {
       .attr("d", path)
       .on("mousemove", (event, d) => {
         const { stateName, stateKey, data, historicalEntry } = countyInfo(d);
-        let html = `<strong>${d.properties.name}, ${stateName || "?"}</strong><br>`;
+        let html = `<strong>${escapeHtml(d.properties.name)}, ${escapeHtml(stateName || "?")}</strong><br>`;
         if (!data) {
           const status = stateStatus(stateKey);
           html += status && !status.countyLevel
@@ -1406,8 +1423,8 @@ function start(topology, districtTopology, defaultRaceData) {
         } else {
           // Total ballots = demPredicted + repPredicted always, whichever
           // path produced them (self-extrapolated from this county's own
-          // percentIn, or the flat fallback) - both preserve the total, only
-          // the D/R split differs. See estimate.js's expectedTotalVotes.
+          // percentIn, or the flat fallback) - both project the same two-party
+          // total, only the D/R split differs. See estimate.js's expectedTotalVotes.
           const totalBallots = data.demPredicted + data.repPredicted;
           html += `${+data.percentIn.toFixed(1)}% in, ${totalBallots.toLocaleString()} total ballots<br>`
             + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R<br>`;
@@ -1438,7 +1455,7 @@ function start(topology, districtTopology, defaultRaceData) {
 
     nationalSvg.selectAll("*").remove();
     COLORS = snapshotColors();
-    buildDefs(nationalSvg, "nat", scaleFor(nationalSvg, 975));
+    buildDefs(nationalSvg, "nat", scaleFor(nationalSvg, 975, 610));
 
     nationalSvg.append("g")
       .selectAll("path")
@@ -1451,7 +1468,7 @@ function start(topology, districtTopology, defaultRaceData) {
       .attr("role", d => (clickable(d) ? "button" : null))
       .attr("aria-label", d => `${labelOf(d)}: ${stateSummary(weightKeyOf(d), stateStatus(statusKeyOf(d)))}`)
       .on("mousemove", (event, d) => {
-        showTooltip(event, `<strong>${labelOf(d)}</strong><br>${stateSummary(weightKeyOf(d), stateStatus(statusKeyOf(d)))}`);
+        showTooltip(event, `<strong>${escapeHtml(labelOf(d))}</strong><br>${stateSummary(weightKeyOf(d), stateStatus(statusKeyOf(d)))}`);
       })
       .on("mouseleave", hideTooltip)
       .on("click", (event, d) => { if (clickable(d)) openOverlay(d); })
@@ -1650,14 +1667,14 @@ function start(topology, districtTopology, defaultRaceData) {
       const countedShare = pct(side.now, side.proj || 1);
       return `
       <div class="cand-row">
-        <div class="cand-name"><i style="background:${side.solid}"></i>${side.label}</div>
+        <div class="cand-name"><i style="background:${side.solid}"></i>${escapeHtml(side.label)}</div>
         <div class="cand-numbers">
           <span class="now" style="color:${side.solid}">${numberFmt(side.now)}</span>
           <span class="arrow">&rarr;</span>
           <span style="color:${side.tint}">${numberFmt(side.proj)}</span>
         </div>
         <div class="cand-bar" role="img"
-             aria-label="${side.label}: ${numberFmt(side.now)} counted, ${numberFmt(side.proj)} projected, out of an estimated ${numberFmt(agg.ballotEstimate)} total ballots">
+             aria-label="${escapeHtml(side.label)}: ${numberFmt(side.now)} counted, ${numberFmt(side.proj)} projected, out of an estimated ${numberFmt(agg.ballotEstimate)} total ballots">
           <div class="counted" style="width:${barWidth * countedShare / 100}%;background:${side.solid}"></div>
           <div class="projected" style="width:${barWidth * (100 - countedShare) / 100}%;background:${side.tint}"></div>
           <div class="cand-bar-mid" title="Half of the estimated ${numberFmt(agg.ballotEstimate)} total ballots"></div>
@@ -1680,11 +1697,11 @@ function start(topology, districtTopology, defaultRaceData) {
     const reportingCount = areas.filter(area => !area.noData).length;
     const rows = areas.map(area => (area.noData ? `
       <tr>
-        <td>${area.name}</td>
+        <td>${escapeHtml(area.name)}</td>
         <td colspan="5" class="proj">No data yet</td>
       </tr>` : `
       <tr>
-        <td>${area.name}</td>
+        <td>${escapeHtml(area.name)}</td>
         <td>${(+area.percentIn.toFixed(1))}%</td>
         <td class="dem-now">${numberFmt(area.demReal)}<span class="proj-inline">${numberFmt(area.demPredicted)}</span></td>
         <td class="proj">${numberFmt(area.demPredicted)}</td>
@@ -1696,8 +1713,8 @@ function start(topology, districtTopology, defaultRaceData) {
       <caption>${reportingCount} of ${areas.length} ${unit} reporting &middot; counted, then projected to full reporting</caption>
       <thead><tr>
         <th scope="col">Area</th><th scope="col">In</th>
-        <th scope="col">${names.dem}</th><th scope="col">Proj.</th>
-        <th scope="col">${names.rep}</th><th scope="col">Proj.</th>
+        <th scope="col">${escapeHtml(names.dem)}</th><th scope="col">Proj.</th>
+        <th scope="col">${escapeHtml(names.rep)}</th><th scope="col">Proj.</th>
       </tr></thead>
       <tbody>${rows}</tbody>`);
   }
@@ -1753,7 +1770,7 @@ function start(topology, districtTopology, defaultRaceData) {
     overlay.classed("open", true); // open first: a hidden SVG has no width to measure
 
     COLORS = snapshotColors();
-    buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth));
+    buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth, vbHeight));
     renderCounties(stateSvg, countiesInState, path, "st");
 
     stateSvg.append("path")
@@ -1798,7 +1815,7 @@ function start(topology, districtTopology, defaultRaceData) {
       .attr("d", path)
       .on("mousemove", (event, d) => {
         const data = dataByKey.get(d.id);
-        let html = `<strong>${d.properties.name}</strong><br>`;
+        let html = `<strong>${escapeHtml(d.properties.name)}</strong><br>`;
         if (!data) {
           html += "No data yet";
         } else {
@@ -1896,7 +1913,6 @@ function start(topology, districtTopology, defaultRaceData) {
     const dataByKey = new Map(areas.filter(a => a.fips && !a.noData).map(a => [a.fips, {
       percentIn: a.percentIn, demReal: a.demReal, repReal: a.repReal,
       demPredicted: a.demPredicted, repPredicted: a.repPredicted,
-      demName: names.dem, repName: names.rep,
     }]));
 
     const path = d3.geoPath();
@@ -1908,7 +1924,7 @@ function start(topology, districtTopology, defaultRaceData) {
     stateSvg.attr("aria-label", `${label} counties: ${note}`);
 
     COLORS = snapshotColors();
-    buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth));
+    buildDefs(stateSvg, "st", scaleFor(stateSvg, vbWidth, vbHeight));
     renderDistrictCounties(stateSvg, countiesInDistrict, path, "st", dataByKey);
 
     stateSvg.append("path")
@@ -1977,7 +1993,15 @@ function start(topology, districtTopology, defaultRaceData) {
     districtFetchToken++; // cancel whatever district fetch might still be in flight
     hideTooltip();
     setBackgroundInert(false);
-    if (restoreFocus && lastFocused && lastFocused.isConnected) lastFocused.focus();
+    if (restoreFocus && lastFocused) {
+      let target = lastFocused;
+      // A redraw may have replaced the opener; find its successor by datum.
+      if (!target.isConnected && target.__data__) {
+        const key = weightKeyOf(target.__data__);
+        target = nationalSvg.selectAll("path.state").filter(d => weightKeyOf(d) === key).node();
+      }
+      if (target && target.isConnected) target.focus();
+    }
     lastFocused = null;
   }
 
@@ -2010,6 +2034,11 @@ function start(topology, districtTopology, defaultRaceData) {
   // The hatch tile is sized in viewBox units to hit a target screen size, so
   // it has to be rebuilt whenever the map's rendered width changes; the
   // palette has to be re-read whenever the OS theme flips.
+  const sizeKey = () => [nationalSvg, stateSvg].map(s => {
+    const r = s.node().getBoundingClientRect();
+    return `${r.width}x${r.height}`;
+  }).join("|");
+  let lastSize = null;
   function redrawAll() {
     renderNational();
     // The drill-down has its own defs and its own baked-in fill attributes, so
@@ -2026,12 +2055,13 @@ function start(topology, districtTopology, defaultRaceData) {
       // reason to hit NBC's per-district page again.
       renderDistrictOverlay(openDistrictFeature, openDistrictData);
     }
+    lastSize = sizeKey();
   }
 
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(redrawAll, 150);
+    resizeTimer = setTimeout(() => { if (sizeKey() !== lastSize) redrawAll(); }, 150);
   });
   // Follow the OS only while the user has not picked a theme themselves.
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", event => {
@@ -2043,20 +2073,22 @@ function start(topology, districtTopology, defaultRaceData) {
   // Re-pull the active race on a timer, so a deployed page keeps up with the
   // count without anyone reloading. Skip the redraw when nothing changed:
   // re-rendering steals keyboard focus and closes nothing gracefully.
-  setInterval(() => {
+  function refresh() {
+    if (document.hidden) return;
     const race = current.race;
-    loadRace(race)
+    loadRace(race, current)
       .then(loaded => {
         if (race !== current.race) return; // the user switched mid-flight
-        const unchanged = current.meta && loaded.meta && current.meta.fetchedAt === loaded.meta.fetchedAt;
         current = loaded;
-        if (unchanged) { renderSubtitle(); return; } // just age the timestamp
+        if (loaded.unchanged) { renderSubtitle(); return; } // just age the timestamp
         renderRaceTabs();
         redrawAll();
         renderScoreboard();
       })
       .catch(err => console.warn("refresh failed, keeping current data", err));
-  }, REFRESH_SECONDS * 1000);
+  }
+  setInterval(refresh, REFRESH_SECONDS * 1000);
+  document.addEventListener("visibilitychange", refresh);
 
   // Theme. The OS preference is the default, but it is only a default - the
   // page never shows both themes, so without an override nobody can see the
@@ -2104,6 +2136,7 @@ function start(topology, districtTopology, defaultRaceData) {
 
   renderRaceTabs();
   renderNational();
+  lastSize = sizeKey();
   renderScoreboard();
 
   d3.select("#loading").style("display", "none");
