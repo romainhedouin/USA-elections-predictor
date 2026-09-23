@@ -354,6 +354,24 @@ The second command triggers a redeploy, which means a few seconds of downtime
 markup or URL changed — the map keeps serving the last good data while you fix
 `fetch_results.py`.
 
+**House maps, the week before.** Nine states vote on new district lines in
+2026, and courts can still change a map (as of September 2026 Missouri's was
+back at the Supreme Court, and Louisiana's faced challenges). If any state's
+map for November differs from what `scripts/build_district_geometry.py` lists
+in `NEW_MAP_STATES` / `KEEP_OLD_MAP`, update those two lists, then:
+
+```bash
+./scripts/build_district_topology.sh      # refuses to run if the lists disagree with Census geometry
+python scripts/build_historical_baseline.py --race house --format nbc
+```
+
+and bump `HISTORICAL_DATA_VERSION` in `map.html` before committing. The
+baseline must be rebuilt too: which districts count as redrawn decides which
+ones have a 2024 baseline. This only works for maps the Census Bureau's
+120th-Congress file contains (published July 2026, covering the ten states
+that had enacted new maps by then); a map drawn after that isn't in it, and
+would need its shapefile from the state.
+
 ---
 
 ## 9. Cost and usage limits

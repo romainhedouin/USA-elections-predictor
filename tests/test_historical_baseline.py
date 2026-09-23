@@ -6,6 +6,8 @@ module has no rendering to check.
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import build_historical_baseline as bhb
@@ -27,10 +29,9 @@ def test_president_baseline_skips_counties_with_no_major_party_votes():
     assert bhb.president_baseline(rows, 2024) == {}
 
 
-def test_house_baseline_skips_redistricting_affected_states():
-    # Pick a real GEOID from an affected state to prove the skip is live,
-    # not just a name match.
-    affected_geoid = next(iter(races.REDISTRICTING_AFFECTED_DISTRICTS))
+def test_house_baseline_skips_districts_redrawn_since_2024():
+    # Pick a real redrawn GEOID to prove the skip is live, not just a name match.
+    affected_geoid = sorted(races.REDRAWN_SINCE_2024)[0]
     affected_state = races.HOUSE_DISTRICTS[affected_geoid]["state"]
     affected_district_num = affected_geoid[2:].lstrip("0") or "0"
 
@@ -49,8 +50,8 @@ def test_house_baseline_computes_geoid_for_a_normal_district():
     # zero-padded (not at-large) code path.
     from collections import Counter
     counts = Counter(info["state"] for info in races.HOUSE_DISTRICTS.values())
-    multi_district_state = next(state for state, n in counts.items() if n > 1
-                                 and state not in {"Alabama", "Georgia", "Louisiana", "New York", "North Carolina"})
+    redrawn_states = {races.HOUSE_DISTRICTS[g]["state"] for g in races.REDRAWN_SINCE_2024}
+    multi_district_state = next(state for state, n in counts.items() if n > 1 and state not in redrawn_states)
     geoid = next(g for g, info in races.HOUSE_DISTRICTS.items() if info["state"] == multi_district_state)
     district_num = str(int(geoid[2:]))
 
@@ -120,16 +121,33 @@ def test_president_baseline_wide_skips_blank_and_na_fips():
     assert list(bhb.president_baseline_wide(rows)) == ["06037"]
 
 
-def test_county_weighted_ignores_zz_water_pseudo_districts():
-    real = sorted(g for g in races.HOUSE_DISTRICTS if g.startswith("17"))[:2]
-    zz = "17ZZ"
-    rows = [
-        {"GEOID_CD119_20": real[0], "GEOID_COUNTY_20": "17001"},
-        {"GEOID_CD119_20": real[1], "GEOID_COUNTY_20": "17003"},
-        # A county split only with water counts as whole.
-        {"GEOID_CD119_20": real[1], "GEOID_COUNTY_20": "17031"},
-        {"GEOID_CD119_20": zz, "GEOID_COUNTY_20": "17031"},
+def _nbc_district(geoid, dem, gop, percent_in=100.0):
+    return {"geoid": geoid, "percent_in": percent_in, "votes": dem + gop,
+            "by_party": {"dem": dem, "gop": gop, "lib": 7}}
+
+
+def test_house_baseline_nbc_two_party_share_and_skips():
+    unchanged = sorted(set(races.HOUSE_DISTRICTS) - races.REDRAWN_SINCE_2024)
+    redrawn = sorted(races.REDRAWN_SINCE_2024)[0]
+    districts = [
+        _nbc_district(unchanged[0], 600, 400),
+        _nbc_district(unchanged[1], 500, 0),   # no Republican on the ballot
+        _nbc_district(redrawn, 500, 500),       # 2024 lines no longer exist
+        _nbc_district("1198", 500, 500),        # DC delegate: no voting seat
     ]
-    county_votes = {"17001": 100, "17003": 100, "17031": 1000}
-    baseline = bhb.house_baseline_county_weighted(rows, county_votes, 2024)
-    assert baseline == {real[0]: {"votes": 100, "year": 2024}, real[1]: {"votes": 1100, "year": 2024}}
+    baseline = bhb.house_baseline_nbc(districts, 2024)
+    # Third-party votes (lib) are left out of the two-party share and total.
+    assert baseline == {unchanged[0]: {"demShare": 0.6, "repShare": 0.4, "votes": 1000, "year": 2024}}
+
+
+def test_house_baseline_nbc_refuses_incomplete_results():
+    geoid = sorted(set(races.HOUSE_DISTRICTS) - races.REDRAWN_SINCE_2024)[0]
+    with pytest.raises(SystemExit):
+        bhb.house_baseline_nbc([_nbc_district(geoid, 60, 40, percent_in=99.0)], 2024)
+
+
+def test_redrawn_districts_are_only_in_states_that_redrew():
+    states = {g[:2] for g in races.REDRAWN_SINCE_2024}
+    # Alabama, California, Florida, Louisiana, North Carolina, Ohio, Tennessee, Texas, Utah.
+    assert states == {"01", "06", "12", "22", "37", "39", "47", "48", "49"}
+    assert len(races.REDRAWN_SINCE_2024) == 137

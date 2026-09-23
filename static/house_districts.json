@@ -33,83 +33,103 @@
  },
  "1208": {
   "state": "Florida",
-  "label": "Florida District 8"
+  "label": "Florida District 8",
+  "redrawnSince2024": true
  },
  "1209": {
   "state": "Florida",
-  "label": "Florida District 9"
+  "label": "Florida District 9",
+  "redrawnSince2024": true
  },
  "1210": {
   "state": "Florida",
-  "label": "Florida District 10"
+  "label": "Florida District 10",
+  "redrawnSince2024": true
  },
  "1211": {
   "state": "Florida",
-  "label": "Florida District 11"
+  "label": "Florida District 11",
+  "redrawnSince2024": true
  },
  "1212": {
   "state": "Florida",
-  "label": "Florida District 12"
+  "label": "Florida District 12",
+  "redrawnSince2024": true
  },
  "1213": {
   "state": "Florida",
-  "label": "Florida District 13"
+  "label": "Florida District 13",
+  "redrawnSince2024": true
  },
  "1214": {
   "state": "Florida",
-  "label": "Florida District 14"
+  "label": "Florida District 14",
+  "redrawnSince2024": true
  },
  "1215": {
   "state": "Florida",
-  "label": "Florida District 15"
+  "label": "Florida District 15",
+  "redrawnSince2024": true
  },
  "1216": {
   "state": "Florida",
-  "label": "Florida District 16"
+  "label": "Florida District 16",
+  "redrawnSince2024": true
  },
  "1217": {
   "state": "Florida",
-  "label": "Florida District 17"
+  "label": "Florida District 17",
+  "redrawnSince2024": true
  },
  "1218": {
   "state": "Florida",
-  "label": "Florida District 18"
+  "label": "Florida District 18",
+  "redrawnSince2024": true
  },
  "1219": {
   "state": "Florida",
-  "label": "Florida District 19"
+  "label": "Florida District 19",
+  "redrawnSince2024": true
  },
  "1220": {
   "state": "Florida",
-  "label": "Florida District 20"
+  "label": "Florida District 20",
+  "redrawnSince2024": true
  },
  "1221": {
   "state": "Florida",
-  "label": "Florida District 21"
+  "label": "Florida District 21",
+  "redrawnSince2024": true
  },
  "1222": {
   "state": "Florida",
-  "label": "Florida District 22"
+  "label": "Florida District 22",
+  "redrawnSince2024": true
  },
  "1223": {
   "state": "Florida",
-  "label": "Florida District 23"
+  "label": "Florida District 23",
+  "redrawnSince2024": true
  },
  "1224": {
   "state": "Florida",
-  "label": "Florida District 24"
+  "label": "Florida District 24",
+  "redrawnSince2024": true
  },
  "1225": {
   "state": "Florida",
-  "label": "Florida District 25"
+  "label": "Florida District 25",
+  "redrawnSince2024": true
  },
  "1226": {
   "state": "Florida",
-  "label": "Florida District 26"
+  "label": "Florida District 26",
+  "redrawnSince2024": true
  },
  "1227": {
   "state": "Florida",
-  "label": "Florida District 27"
+  "label": "Florida District 27",
+  "redrawnSince2024": true
  },
  "1228": {
   "state": "Florida",
@@ -349,27 +369,33 @@
  },
  "2201": {
   "state": "Louisiana",
-  "label": "Louisiana District 1"
+  "label": "Louisiana District 1",
+  "redrawnSince2024": true
  },
  "2202": {
   "state": "Louisiana",
-  "label": "Louisiana District 2"
+  "label": "Louisiana District 2",
+  "redrawnSince2024": true
  },
  "2203": {
   "state": "Louisiana",
-  "label": "Louisiana District 3"
+  "label": "Louisiana District 3",
+  "redrawnSince2024": true
  },
  "2204": {
   "state": "Louisiana",
-  "label": "Louisiana District 4"
+  "label": "Louisiana District 4",
+  "redrawnSince2024": true
  },
  "2205": {
   "state": "Louisiana",
-  "label": "Louisiana District 5"
+  "label": "Louisiana District 5",
+  "redrawnSince2024": true
  },
  "2206": {
   "state": "Louisiana",
-  "label": "Louisiana District 6"
+  "label": "Louisiana District 6",
+  "redrawnSince2024": true
  },
  "2301": {
   "state": "Maine",
@@ -789,7 +815,8 @@
  },
  "3701": {
   "state": "North Carolina",
-  "label": "North Carolina District 1"
+  "label": "North Carolina District 1",
+  "redrawnSince2024": true
  },
  "3702": {
   "state": "North Carolina",
@@ -797,7 +824,8 @@
  },
  "3703": {
   "state": "North Carolina",
-  "label": "North Carolina District 3"
+  "label": "North Carolina District 3",
+  "redrawnSince2024": true
  },
  "3704": {
   "state": "North Carolina",
@@ -849,11 +877,13 @@
  },
  "3901": {
   "state": "Ohio",
-  "label": "Ohio District 1"
+  "label": "Ohio District 1",
+  "redrawnSince2024": true
  },
  "3902": {
   "state": "Ohio",
-  "label": "Ohio District 2"
+  "label": "Ohio District 2",
+  "redrawnSince2024": true
  },
  "3903": {
   "state": "Ohio",
@@ -861,31 +891,38 @@
  },
  "3904": {
   "state": "Ohio",
-  "label": "Ohio District 4"
+  "label": "Ohio District 4",
+  "redrawnSince2024": true
  },
  "3905": {
   "state": "Ohio",
-  "label": "Ohio District 5"
+  "label": "Ohio District 5",
+  "redrawnSince2024": true
  },
  "3906": {
   "state": "Ohio",
-  "label": "Ohio District 6"
+  "label": "Ohio District 6",
+  "redrawnSince2024": true
  },
  "3907": {
   "state": "Ohio",
-  "label": "Ohio District 7"
+  "label": "Ohio District 7",
+  "redrawnSince2024": true
  },
  "3908": {
   "state": "Ohio",
-  "label": "Ohio District 8"
+  "label": "Ohio District 8",
+  "redrawnSince2024": true
  },
  "3909": {
   "state": "Ohio",
-  "label": "Ohio District 9"
+  "label": "Ohio District 9",
+  "redrawnSince2024": true
  },
  "3910": {
   "state": "Ohio",
-  "label": "Ohio District 10"
+  "label": "Ohio District 10",
+  "redrawnSince2024": true
  },
  "3911": {
   "state": "Ohio",
@@ -893,19 +930,23 @@
  },
  "3912": {
   "state": "Ohio",
-  "label": "Ohio District 12"
+  "label": "Ohio District 12",
+  "redrawnSince2024": true
  },
  "3913": {
   "state": "Ohio",
-  "label": "Ohio District 13"
+  "label": "Ohio District 13",
+  "redrawnSince2024": true
  },
  "3914": {
   "state": "Ohio",
-  "label": "Ohio District 14"
+  "label": "Ohio District 14",
+  "redrawnSince2024": true
  },
  "3915": {
   "state": "Ohio",
-  "label": "Ohio District 15"
+  "label": "Ohio District 15",
+  "redrawnSince2024": true
  },
  "4001": {
   "state": "Oklahoma",
@@ -1069,103 +1110,128 @@
  },
  "4703": {
   "state": "Tennessee",
-  "label": "Tennessee District 3"
+  "label": "Tennessee District 3",
+  "redrawnSince2024": true
  },
  "4704": {
   "state": "Tennessee",
-  "label": "Tennessee District 4"
+  "label": "Tennessee District 4",
+  "redrawnSince2024": true
  },
  "4705": {
   "state": "Tennessee",
-  "label": "Tennessee District 5"
+  "label": "Tennessee District 5",
+  "redrawnSince2024": true
  },
  "4706": {
   "state": "Tennessee",
-  "label": "Tennessee District 6"
+  "label": "Tennessee District 6",
+  "redrawnSince2024": true
  },
  "4707": {
   "state": "Tennessee",
-  "label": "Tennessee District 7"
+  "label": "Tennessee District 7",
+  "redrawnSince2024": true
  },
  "4708": {
   "state": "Tennessee",
-  "label": "Tennessee District 8"
+  "label": "Tennessee District 8",
+  "redrawnSince2024": true
  },
  "4709": {
   "state": "Tennessee",
-  "label": "Tennessee District 9"
+  "label": "Tennessee District 9",
+  "redrawnSince2024": true
  },
  "4801": {
   "state": "Texas",
-  "label": "Texas District 1"
+  "label": "Texas District 1",
+  "redrawnSince2024": true
  },
  "4802": {
   "state": "Texas",
-  "label": "Texas District 2"
+  "label": "Texas District 2",
+  "redrawnSince2024": true
  },
  "4803": {
   "state": "Texas",
-  "label": "Texas District 3"
+  "label": "Texas District 3",
+  "redrawnSince2024": true
  },
  "4804": {
   "state": "Texas",
-  "label": "Texas District 4"
+  "label": "Texas District 4",
+  "redrawnSince2024": true
  },
  "4805": {
   "state": "Texas",
-  "label": "Texas District 5"
+  "label": "Texas District 5",
+  "redrawnSince2024": true
  },
  "4806": {
   "state": "Texas",
-  "label": "Texas District 6"
+  "label": "Texas District 6",
+  "redrawnSince2024": true
  },
  "4807": {
   "state": "Texas",
-  "label": "Texas District 7"
+  "label": "Texas District 7",
+  "redrawnSince2024": true
  },
  "4808": {
   "state": "Texas",
-  "label": "Texas District 8"
+  "label": "Texas District 8",
+  "redrawnSince2024": true
  },
  "4809": {
   "state": "Texas",
-  "label": "Texas District 9"
+  "label": "Texas District 9",
+  "redrawnSince2024": true
  },
  "4810": {
   "state": "Texas",
-  "label": "Texas District 10"
+  "label": "Texas District 10",
+  "redrawnSince2024": true
  },
  "4811": {
   "state": "Texas",
-  "label": "Texas District 11"
+  "label": "Texas District 11",
+  "redrawnSince2024": true
  },
  "4812": {
   "state": "Texas",
-  "label": "Texas District 12"
+  "label": "Texas District 12",
+  "redrawnSince2024": true
  },
  "4813": {
   "state": "Texas",
-  "label": "Texas District 13"
+  "label": "Texas District 13",
+  "redrawnSince2024": true
  },
  "4814": {
   "state": "Texas",
-  "label": "Texas District 14"
+  "label": "Texas District 14",
+  "redrawnSince2024": true
  },
  "4815": {
   "state": "Texas",
-  "label": "Texas District 15"
+  "label": "Texas District 15",
+  "redrawnSince2024": true
  },
  "4816": {
   "state": "Texas",
-  "label": "Texas District 16"
+  "label": "Texas District 16",
+  "redrawnSince2024": true
  },
  "4817": {
   "state": "Texas",
-  "label": "Texas District 17"
+  "label": "Texas District 17",
+  "redrawnSince2024": true
  },
  "4818": {
   "state": "Texas",
-  "label": "Texas District 18"
+  "label": "Texas District 18",
+  "redrawnSince2024": true
  },
  "4819": {
   "state": "Texas",
@@ -1173,95 +1239,118 @@
  },
  "4820": {
   "state": "Texas",
-  "label": "Texas District 20"
+  "label": "Texas District 20",
+  "redrawnSince2024": true
  },
  "4821": {
   "state": "Texas",
-  "label": "Texas District 21"
+  "label": "Texas District 21",
+  "redrawnSince2024": true
  },
  "4822": {
   "state": "Texas",
-  "label": "Texas District 22"
+  "label": "Texas District 22",
+  "redrawnSince2024": true
  },
  "4823": {
   "state": "Texas",
-  "label": "Texas District 23"
+  "label": "Texas District 23",
+  "redrawnSince2024": true
  },
  "4824": {
   "state": "Texas",
-  "label": "Texas District 24"
+  "label": "Texas District 24",
+  "redrawnSince2024": true
  },
  "4825": {
   "state": "Texas",
-  "label": "Texas District 25"
+  "label": "Texas District 25",
+  "redrawnSince2024": true
  },
  "4826": {
   "state": "Texas",
-  "label": "Texas District 26"
+  "label": "Texas District 26",
+  "redrawnSince2024": true
  },
  "4827": {
   "state": "Texas",
-  "label": "Texas District 27"
+  "label": "Texas District 27",
+  "redrawnSince2024": true
  },
  "4828": {
   "state": "Texas",
-  "label": "Texas District 28"
+  "label": "Texas District 28",
+  "redrawnSince2024": true
  },
  "4829": {
   "state": "Texas",
-  "label": "Texas District 29"
+  "label": "Texas District 29",
+  "redrawnSince2024": true
  },
  "4830": {
   "state": "Texas",
-  "label": "Texas District 30"
+  "label": "Texas District 30",
+  "redrawnSince2024": true
  },
  "4831": {
   "state": "Texas",
-  "label": "Texas District 31"
+  "label": "Texas District 31",
+  "redrawnSince2024": true
  },
  "4832": {
   "state": "Texas",
-  "label": "Texas District 32"
+  "label": "Texas District 32",
+  "redrawnSince2024": true
  },
  "4833": {
   "state": "Texas",
-  "label": "Texas District 33"
+  "label": "Texas District 33",
+  "redrawnSince2024": true
  },
  "4834": {
   "state": "Texas",
-  "label": "Texas District 34"
+  "label": "Texas District 34",
+  "redrawnSince2024": true
  },
  "4835": {
   "state": "Texas",
-  "label": "Texas District 35"
+  "label": "Texas District 35",
+  "redrawnSince2024": true
  },
  "4836": {
   "state": "Texas",
-  "label": "Texas District 36"
+  "label": "Texas District 36",
+  "redrawnSince2024": true
  },
  "4837": {
   "state": "Texas",
-  "label": "Texas District 37"
+  "label": "Texas District 37",
+  "redrawnSince2024": true
  },
  "4838": {
   "state": "Texas",
-  "label": "Texas District 38"
+  "label": "Texas District 38",
+  "redrawnSince2024": true
  },
  "4901": {
   "state": "Utah",
-  "label": "Utah District 1"
+  "label": "Utah District 1",
+  "redrawnSince2024": true
  },
  "4902": {
   "state": "Utah",
-  "label": "Utah District 2"
+  "label": "Utah District 2",
+  "redrawnSince2024": true
  },
  "4903": {
   "state": "Utah",
-  "label": "Utah District 3"
+  "label": "Utah District 3",
+  "redrawnSince2024": true
  },
  "4904": {
   "state": "Utah",
-  "label": "Utah District 4"
+  "label": "Utah District 4",
+  "redrawnSince2024": true
  },
  "5000": {
   "state": "Vermont",
@@ -1397,11 +1486,13 @@
  },
  "0101": {
   "state": "Alabama",
-  "label": "Alabama District 1"
+  "label": "Alabama District 1",
+  "redrawnSince2024": true
  },
  "0102": {
   "state": "Alabama",
-  "label": "Alabama District 2"
+  "label": "Alabama District 2",
+  "redrawnSince2024": true
  },
  "0103": {
   "state": "Alabama",
@@ -1417,11 +1508,13 @@
  },
  "0106": {
   "state": "Alabama",
-  "label": "Alabama District 6"
+  "label": "Alabama District 6",
+  "redrawnSince2024": true
  },
  "0107": {
   "state": "Alabama",
-  "label": "Alabama District 7"
+  "label": "Alabama District 7",
+  "redrawnSince2024": true
  },
  "0200": {
   "state": "Alaska",
@@ -1481,43 +1574,53 @@
  },
  "0601": {
   "state": "California",
-  "label": "California District 1"
+  "label": "California District 1",
+  "redrawnSince2024": true
  },
  "0602": {
   "state": "California",
-  "label": "California District 2"
+  "label": "California District 2",
+  "redrawnSince2024": true
  },
  "0603": {
   "state": "California",
-  "label": "California District 3"
+  "label": "California District 3",
+  "redrawnSince2024": true
  },
  "0604": {
   "state": "California",
-  "label": "California District 4"
+  "label": "California District 4",
+  "redrawnSince2024": true
  },
  "0605": {
   "state": "California",
-  "label": "California District 5"
+  "label": "California District 5",
+  "redrawnSince2024": true
  },
  "0606": {
   "state": "California",
-  "label": "California District 6"
+  "label": "California District 6",
+  "redrawnSince2024": true
  },
  "0607": {
   "state": "California",
-  "label": "California District 7"
+  "label": "California District 7",
+  "redrawnSince2024": true
  },
  "0608": {
   "state": "California",
-  "label": "California District 8"
+  "label": "California District 8",
+  "redrawnSince2024": true
  },
  "0609": {
   "state": "California",
-  "label": "California District 9"
+  "label": "California District 9",
+  "redrawnSince2024": true
  },
  "0610": {
   "state": "California",
-  "label": "California District 10"
+  "label": "California District 10",
+  "redrawnSince2024": true
  },
  "0611": {
   "state": "California",
@@ -1529,11 +1632,13 @@
  },
  "0613": {
   "state": "California",
-  "label": "California District 13"
+  "label": "California District 13",
+  "redrawnSince2024": true
  },
  "0614": {
   "state": "California",
-  "label": "California District 14"
+  "label": "California District 14",
+  "redrawnSince2024": true
  },
  "0615": {
   "state": "California",
@@ -1541,15 +1646,18 @@
  },
  "0616": {
   "state": "California",
-  "label": "California District 16"
+  "label": "California District 16",
+  "redrawnSince2024": true
  },
  "0617": {
   "state": "California",
-  "label": "California District 17"
+  "label": "California District 17",
+  "redrawnSince2024": true
  },
  "0618": {
   "state": "California",
-  "label": "California District 18"
+  "label": "California District 18",
+  "redrawnSince2024": true
  },
  "0619": {
   "state": "California",
@@ -1557,59 +1665,73 @@
  },
  "0620": {
   "state": "California",
-  "label": "California District 20"
+  "label": "California District 20",
+  "redrawnSince2024": true
  },
  "0621": {
   "state": "California",
-  "label": "California District 21"
+  "label": "California District 21",
+  "redrawnSince2024": true
  },
  "0622": {
   "state": "California",
-  "label": "California District 22"
+  "label": "California District 22",
+  "redrawnSince2024": true
  },
  "0623": {
   "state": "California",
-  "label": "California District 23"
+  "label": "California District 23",
+  "redrawnSince2024": true
  },
  "0624": {
   "state": "California",
-  "label": "California District 24"
+  "label": "California District 24",
+  "redrawnSince2024": true
  },
  "0625": {
   "state": "California",
-  "label": "California District 25"
+  "label": "California District 25",
+  "redrawnSince2024": true
  },
  "0626": {
   "state": "California",
-  "label": "California District 26"
+  "label": "California District 26",
+  "redrawnSince2024": true
  },
  "0627": {
   "state": "California",
-  "label": "California District 27"
+  "label": "California District 27",
+  "redrawnSince2024": true
  },
  "0628": {
   "state": "California",
-  "label": "California District 28"
+  "label": "California District 28",
+  "redrawnSince2024": true
  },
  "0629": {
   "state": "California",
-  "label": "California District 29"
+  "label": "California District 29",
+  "redrawnSince2024": true
  },
  "0630": {
   "state": "California",
-  "label": "California District 30"
+  "label": "California District 30",
+  "redrawnSince2024": true
  },
  "0631": {
   "state": "California",
-  "label": "California District 31"
+  "label": "California District 31",
+  "redrawnSince2024": true
  },
  "0632": {
   "state": "California",
-  "label": "California District 32"
+  "label": "California District 32",
+  "redrawnSince2024": true
  },
  "0633": {
   "state": "California",
-  "label": "California District 33"
+  "label": "California District 33",
+  "redrawnSince2024": true
  },
  "0634": {
   "state": "California",
@@ -1617,7 +1739,8 @@
  },
  "0635": {
   "state": "California",
-  "label": "California District 35"
+  "label": "California District 35",
+  "redrawnSince2024": true
  },
  "0636": {
   "state": "California",
@@ -1629,23 +1752,28 @@
  },
  "0638": {
   "state": "California",
-  "label": "California District 38"
+  "label": "California District 38",
+  "redrawnSince2024": true
  },
  "0639": {
   "state": "California",
-  "label": "California District 39"
+  "label": "California District 39",
+  "redrawnSince2024": true
  },
  "0640": {
   "state": "California",
-  "label": "California District 40"
+  "label": "California District 40",
+  "redrawnSince2024": true
  },
  "0641": {
   "state": "California",
-  "label": "California District 41"
+  "label": "California District 41",
+  "redrawnSince2024": true
  },
  "0642": {
   "state": "California",
-  "label": "California District 42"
+  "label": "California District 42",
+  "redrawnSince2024": true
  },
  "0643": {
   "state": "California",
@@ -1653,39 +1781,48 @@
  },
  "0644": {
   "state": "California",
-  "label": "California District 44"
+  "label": "California District 44",
+  "redrawnSince2024": true
  },
  "0645": {
   "state": "California",
-  "label": "California District 45"
+  "label": "California District 45",
+  "redrawnSince2024": true
  },
  "0646": {
   "state": "California",
-  "label": "California District 46"
+  "label": "California District 46",
+  "redrawnSince2024": true
  },
  "0647": {
   "state": "California",
-  "label": "California District 47"
+  "label": "California District 47",
+  "redrawnSince2024": true
  },
  "0648": {
   "state": "California",
-  "label": "California District 48"
+  "label": "California District 48",
+  "redrawnSince2024": true
  },
  "0649": {
   "state": "California",
-  "label": "California District 49"
+  "label": "California District 49",
+  "redrawnSince2024": true
  },
  "0650": {
   "state": "California",
-  "label": "California District 50"
+  "label": "California District 50",
+  "redrawnSince2024": true
  },
  "0651": {
   "state": "California",
-  "label": "California District 51"
+  "label": "California District 51",
+  "redrawnSince2024": true
  },
  "0652": {
   "state": "California",
-  "label": "California District 52"
+  "label": "California District 52",
+  "redrawnSince2024": true
  },
  "0801": {
   "state": "Colorado",

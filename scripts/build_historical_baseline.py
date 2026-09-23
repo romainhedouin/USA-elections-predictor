@@ -6,7 +6,7 @@ build_district_topology.sh - this is not part of the regular fetch_results.py
 refresh loop.
 
     python scripts/build_historical_baseline.py --race president --input countypres.csv
-    python scripts/build_historical_baseline.py --race house --input house.csv
+    python scripts/build_historical_baseline.py --race house --format nbc
     python scripts/build_historical_baseline.py --race senate --input senate.csv
     python scripts/build_historical_baseline.py --race governor --input governor.csv
 
@@ -26,32 +26,24 @@ DATA SOURCES:
     historical_president.json was actually built from (see README.md's Data
     Sources section) since the MEDSL guestbook isn't practical to automate.
     President only - this format doesn't cover House/Senate/Governor.
-  --format house-state-apportioned: House only. No real per-district House
-    total is available to us (see above), but a real per-STATE total is -
-    the same `wide` president file, summed by state, divided evenly across
-    that state's own current district count (districts are apportioned to
-    roughly equal population by design, so this is a defensible stand-in).
-    Produces a ballot-COUNT-only entry (votes, no demShare/repShare) per
-    district - estimate.js still falls back to the flat estimate for the
-    party split, honestly, but the "total ballots" figure is now a real
-    number instead of absent.
-  --format house-county-weighted: House only, and better than
-    house-state-apportioned - instead of splitting a state's total evenly
-    across its districts, sums each district's REAL constituent counties'
-    vote totals (from the same wide president CSV, passed via --counties),
-    using the Census Bureau's own county<->congressional-district
-    relationship file (--input) to know which counties are in which
-    district: https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.2020.html
-    ("119th Congressional District to County", a plain pipe-delimited .txt,
-    no gate). Reflects each district's actual population distribution
-    instead of assuming every district in a state is equal in size.
+  --format nbc: House only, and what historical_house.json is built from.
+    NBC's own final results for the last House election (the same API and
+    the same party coding fetch_results.py reads live, so a district's live
+    D/R split is compared like for like). Fetched directly, no --input.
+    Checked against the House Clerk's official 2024 statistics: 413 of 435
+    districts match vote for vote; of the districts this keeps, all but 4
+    are within 0.2pt of the official D share, the rest within 1.9pt (NBC
+    folds fusion-party lines into a candidate's total, uses the final
+    ranked-choice round, and codes a few minor-party candidates as D/R).
 
 GRANULARITY DIFFERS BY RACE, and that's a real constraint, not a choice:
   - President: MEDSL publishes actual county-level returns, so the baseline
     is per-FIPS, matching how granular our live county data is.
-  - House: MEDSL publishes district-level returns directly (no county
-    aggregation needed, and none would be correct anyway - district lines
-    don't nest inside county lines). Baseline is per-GEOID.
+  - House: district-level returns (MEDSL, or NBC's final results with
+    --format nbc) - no county aggregation needed, and none would be correct
+    anyway, since district lines don't nest inside county lines. Baseline is
+    per-GEOID, and skips districts redrawn since that election
+    (races.REDRAWN_SINCE_2024).
   - Senate and Governor: MEDSL's readily-available data for these offices is
     STATEWIDE only, not county-level. The baseline for these two races is
     therefore one value per state, applied uniformly to every county in that
@@ -82,7 +74,7 @@ from races import (
     HOUSE_DISTRICTS,
     HOUSE_LAST_ELECTED,
     PRESIDENT_LAST_ELECTED,
-    REDISTRICTING_AFFECTED_DISTRICTS,
+    REDRAWN_SINCE_2024,
     SENATE_LAST_CONTESTED,
 )
 
@@ -167,119 +159,6 @@ def president_baseline_wide(rows):
     return baseline
 
 
-def house_baseline_state_apportioned(rows, year):
-    """GEOID -> {votes, year} (no demShare/repShare - a ballot-COUNT-only
-    estimate, not a partisan one), from the same wide president CSV as
-    president_baseline_wide, summed by state and divided evenly across that
-    state's own current district count. See this file's --format
-    house-state-apportioned docs above for the reasoning.
-    """
-    totals_by_state = {}
-    for row in rows:
-        state = row.get("state_name")
-        if not state:
-            continue
-        totals_by_state[state] = totals_by_state.get(state, 0) + int(float(row.get("total_votes") or 0))
-
-    districts_by_state = {}
-    for geoid, info in HOUSE_DISTRICTS.items():
-        districts_by_state.setdefault(info["state"], []).append(geoid)
-
-    baseline = {}
-    for state, geoids in districts_by_state.items():
-        total = totals_by_state.get(state)
-        if not total:
-            continue
-        per_district = total / len(geoids)
-        for geoid in geoids:
-            baseline[geoid] = {"votes": round(per_district), "year": year}
-    return baseline
-
-
-def house_baseline_county_weighted(relationship_rows, county_votes, year):
-    """GEOID -> {votes, year} (ballot-COUNT-only), by summing each
-    district's actual constituent counties' real vote totals - more
-    accurate than house_baseline_state_apportioned's even split within a
-    state, since it reflects each district's real population distribution
-    rather than assuming every district in a state is equal in size.
-
-    relationship_rows: the Census Bureau's county<->congressional-district
-    relationship file (GEOID_CD119_20, GEOID_COUNTY_20) - see this file's
-    --format house-county-weighted docs above for where to get it.
-    county_votes: county FIPS -> real total vote count (e.g. summed from
-    the same wide president CSV as president_baseline_wide).
-
-    A county entirely inside one district contributes its whole total to
-    that district - exact, not an estimate. A split county (~13% of them,
-    per the 119th Congress file) is divided among its districts by each
-    district's REMAINING population quota, not land area: redistricting law
-    requires every district within a state to have essentially equal
-    population, so a district's "fair share" of the state's total is just
-    state_total / num_districts_in_state; subtracting whatever it already
-    gets from whole counties leaves how much of a split county's population
-    it still needs. This matters because land area and population can point
-    in opposite directions within one county - Maricopa County, AZ spans
-    both dense Phoenix-metro districts and vast empty desert, so an
-    area-weighted split (an earlier version of this function) starved the
-    urban districts of nearly all of Maricopa's real vote count and handed
-    it to whichever district happened to grab the empty desert instead.
-    """
-    # Drops the Census "ZZ" water pseudo-districts and DC's delegate "98".
-    relationship_rows = [r for r in relationship_rows if r["GEOID_CD119_20"] in HOUSE_DISTRICTS]
-    by_state = {}
-    for row in relationship_rows:
-        state_fips = row["GEOID_CD119_20"][:2]
-        by_state.setdefault(state_fips, []).append(row)
-
-    district_votes = {}
-    for state_rows in by_state.values():
-        districts_in_state = {r["GEOID_CD119_20"] for r in state_rows}
-        county_district_count = {}
-        for r in state_rows:
-            county_district_count[r["GEOID_COUNTY_20"]] = county_district_count.get(r["GEOID_COUNTY_20"], 0) + 1
-
-        # Each county counted exactly once, whole or split.
-        seen_counties = set()
-        state_total = 0
-        for r in state_rows:
-            fips = r["GEOID_COUNTY_20"]
-            if fips in seen_counties:
-                continue
-            seen_counties.add(fips)
-            state_total += county_votes.get(fips, 0)
-        fair_share = state_total / len(districts_in_state) if districts_in_state else 0
-
-        whole_county_votes = {geoid: 0 for geoid in districts_in_state}
-        split_by_county = {}
-        for r in state_rows:
-            fips, geoid = r["GEOID_COUNTY_20"], r["GEOID_CD119_20"]
-            if county_district_count[fips] == 1:
-                whole_county_votes[geoid] += county_votes.get(fips, 0)
-            else:
-                split_by_county.setdefault(fips, []).append(geoid)
-
-        remaining_quota = {geoid: fair_share - whole_county_votes[geoid] for geoid in districts_in_state}
-        state_district_votes = dict(whole_county_votes)
-        for fips, geoids in split_by_county.items():
-            total = county_votes.get(fips, 0)
-            weights = [max(remaining_quota[g], 0) for g in geoids]
-            weight_sum = sum(weights)
-            if weight_sum <= 0:
-                # Every district sharing this county already has at least
-                # its fair share from whole counties alone - nothing left to
-                # weight by, so split evenly among just these districts
-                # rather than assigning it all to one arbitrarily.
-                for g in geoids:
-                    state_district_votes[g] = state_district_votes.get(g, 0) + total / len(geoids)
-            else:
-                for g, w in zip(geoids, weights):
-                    state_district_votes[g] = state_district_votes.get(g, 0) + total * (w / weight_sum)
-
-        district_votes.update(state_district_votes)
-
-    return {geoid: {"votes": round(votes), "year": year} for geoid, votes in district_votes.items() if votes > 0}
-
-
 def _house_geoid(state, district_raw):
     prefix = _STATE_FIPS_PREFIX.get(state)
     if prefix is None:
@@ -295,9 +174,9 @@ def _house_geoid(state, district_raw):
 def house_baseline(rows, year):
     """GEOID -> {demShare, repShare, votes, year} from district-level returns.
 
-    Skips REDISTRICTING_AFFECTED_DISTRICTS entirely (see races.py) - those
-    districts get no historical entry, so estimate.js falls back to the flat
-    projection for them rather than comparing across changed boundaries.
+    Skips REDRAWN_SINCE_2024 entirely (see races.py) - those districts get no
+    historical entry, so estimate.js falls back to the flat projection for
+    them rather than comparing across changed boundaries.
     """
     votes = {}
     for row in rows:
@@ -307,7 +186,7 @@ def house_baseline(rows, year):
         if party is None:
             continue
         geoid = _house_geoid(row.get("state"), row.get("district"))
-        if geoid is None or geoid in REDISTRICTING_AFFECTED_DISTRICTS:
+        if geoid is None or geoid in REDRAWN_SINCE_2024:
             continue
         bucket = votes.setdefault(geoid, {"dem": 0, "rep": 0})
         bucket[party] += int(float(row.get("candidatevotes") or 0))
@@ -315,6 +194,27 @@ def house_baseline(rows, year):
     baseline = {}
     for geoid, bucket in votes.items():
         share = _two_party_share(bucket["dem"], bucket["rep"])
+        if share:
+            baseline[geoid] = {**share, "year": year}
+    return baseline
+
+
+def house_baseline_nbc(districts, year):
+    """GEOID -> {demShare, repShare, votes, year} from nbc_api.house_results().
+
+    Only complete results make a baseline, so any district short of 100% in
+    stops the build. Skips districts redrawn since (REDRAWN_SINCE_2024) and
+    races without both a Democrat and a Republican (_two_party_share).
+    """
+    baseline = {}
+    for district in districts:
+        geoid = district["geoid"]
+        if geoid not in HOUSE_DISTRICTS or geoid in REDRAWN_SINCE_2024:
+            continue
+        if district["percent_in"] < 100:
+            raise SystemExit(f"{geoid} is only {district['percent_in']}% in - not a final result")
+        by_party = district["by_party"]
+        share = _two_party_share(by_party.get("dem", 0), by_party.get("gop", 0))
         if share:
             baseline[geoid] = {**share, "year": year}
     return baseline
@@ -383,44 +283,36 @@ def _read_rows(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--race", required=True, choices=["president", "senate", "governor", "house"])
-    parser.add_argument("--input", required=True, type=Path, help="MEDSL CSV downloaded from Harvard Dataverse")
-    parser.add_argument("--counties", type=Path,
-                         help="wide president CSV of real county vote totals - required for "
-                              "--format house-county-weighted only")
+    parser.add_argument("--input", type=Path, help="MEDSL (or wide) CSV; not used by --format nbc")
     parser.add_argument("--output", type=Path, help="defaults to historical_<race>.json")
-    parser.add_argument("--format", choices=["medsl", "wide", "house-state-apportioned", "house-county-weighted"],
-                         default="medsl",
+    parser.add_argument("--format", choices=["medsl", "wide", "nbc"], default="medsl",
                          help="medsl (default): MEDSL's long format. wide: a pre-aggregated "
-                              "one-row-per-county CSV - president only. house-state-apportioned / "
-                              "house-county-weighted: house only - see this file's docstring for all four")
+                              "one-row-per-county CSV - president only. nbc: NBC's final "
+                              "results - house only. See this file's docstring")
     args = parser.parse_args()
 
-    rows = _read_rows(args.input)
-
-    if args.format == "wide":
-        if args.race != "president":
-            raise SystemExit("--format wide only covers president (no House/Senate/Governor equivalent)")
-        baseline = president_baseline_wide(rows)
-    elif args.format == "house-state-apportioned":
+    if args.format == "nbc":
         if args.race != "house":
-            raise SystemExit("--format house-state-apportioned only covers house")
-        baseline = house_baseline_state_apportioned(rows, HOUSE_LAST_ELECTED)
-    elif args.format == "house-county-weighted":
-        if args.race != "house":
-            raise SystemExit("--format house-county-weighted only covers house")
-        if not args.counties:
-            raise SystemExit("--format house-county-weighted requires --counties <wide president CSV>")
-        county_votes = {fips: int(float(r.get("total_votes") or 0))
-                         for r in _read_rows(args.counties) if (fips := _county_fips(r)) is not None}
-        baseline = house_baseline_county_weighted(rows, county_votes, HOUSE_LAST_ELECTED)
-    elif args.race == "president":
-        baseline = president_baseline(rows, PRESIDENT_LAST_ELECTED)
-    elif args.race == "house":
-        baseline = house_baseline(rows, HOUSE_LAST_ELECTED)
-    elif args.race == "senate":
-        baseline = statewide_baseline(rows, "SENATE", SENATE_LAST_CONTESTED)
+            raise SystemExit("--format nbc only covers house")
+        import nbc_api
+        districts, _ = nbc_api.house_results(str(HOUSE_LAST_ELECTED))
+        baseline = house_baseline_nbc(districts, HOUSE_LAST_ELECTED)
     else:
-        baseline = statewide_baseline(rows, "GOVERNOR", GOVERNOR_LAST_ELECTED)
+        if args.input is None:
+            raise SystemExit("--input is required for --format medsl/wide")
+        rows = _read_rows(args.input)
+        if args.format == "wide":
+            if args.race != "president":
+                raise SystemExit("--format wide only covers president (no House/Senate/Governor equivalent)")
+            baseline = president_baseline_wide(rows)
+        elif args.race == "president":
+            baseline = president_baseline(rows, PRESIDENT_LAST_ELECTED)
+        elif args.race == "house":
+            baseline = house_baseline(rows, HOUSE_LAST_ELECTED)
+        elif args.race == "senate":
+            baseline = statewide_baseline(rows, "SENATE", SENATE_LAST_CONTESTED)
+        else:
+            baseline = statewide_baseline(rows, "GOVERNOR", GOVERNOR_LAST_ELECTED)
 
     output = args.output or Path(__file__).resolve().parent.parent / "static" / f"historical_{args.race}.json"
     output.write_text(json.dumps(baseline, separators=(",", ":"), sort_keys=True), encoding="utf-8")

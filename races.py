@@ -78,7 +78,8 @@ GOVERNOR_STATES_2026 = [
     "Wisconsin", "Wyoming",
 ]
 
-# (district GEOID) -> {"state": ..., "label": ...}. Built once by
+# (district GEOID) -> {"state": ..., "label": ..., and "redrawnSince2024": true
+# where the 2026 lines differ from 2024's}. Built once by
 # scripts/build_district_topology.sh from the same Census shapefile the district map
 # boundaries come from, so the two can never disagree about which 435
 # districts exist.
@@ -108,23 +109,13 @@ SENATE_LAST_CONTESTED = {
     state: _SENATE_LAST_CONTESTED_OVERRIDE.get(state, 2020) for state in SENATE_STATES_2026
 }
 
-# States whose U.S. House maps changed after the 2020 redistricting cycle
-# (mid-decade court-ordered redraws used starting with the 2024 elections:
-# Alabama and Louisiana after Voting Rights Act litigation added a second
-# majority-Black district each, North Carolina's and Georgia's legislatures
-# redrew their own maps, New York's court struck down and replaced its 2022
-# map). A district's current GEOID can span different territory than it did
-# in an earlier cycle, so comparing "this district" across those two cycles
-# compares different geography, not a swing. We don't track which individual
-# districts within these states moved how much - conservatively, every
-# district in an affected state is treated as having no valid historical
-# comparator this cycle (build_historical_baseline.py omits them; estimate.js
-# falls back to the flat, non-historical projection for them - see holes #3
-# and #7 in the swing-model design).
-_REDISTRICTING_AFFECTED_STATES = {"Alabama", "Georgia", "Louisiana", "New York", "North Carolina"}
-REDISTRICTING_AFFECTED_DISTRICTS = {
-    geoid for geoid, info in HOUSE_DISTRICTS.items() if info["state"] in _REDISTRICTING_AFFECTED_STATES
-}
+# Districts whose 2026 lines differ from the ones their 2024 election used
+# (nine states redrew - see scripts/build_district_geometry.py, which sets
+# the flag by comparing the Census Bureau's 119th- and 120th-Congress lines
+# district by district). Their 2024 result describes different territory, so
+# it is not a swing baseline: build_historical_baseline.py omits them, and
+# estimate.js falls back to the flat projection for them.
+REDRAWN_SINCE_2024 = {geoid for geoid, info in HOUSE_DISTRICTS.items() if info.get("redrawnSince2024")}
 
 # Sanity-check the hand-maintained tables: right totals, no duplicates, and
 # every state spelled the way ELECTORAL_VOTES (and therefore the map's
@@ -139,7 +130,7 @@ assert set(GOVERNOR_LAST_ELECTED) == set(GOVERNOR_STATES_2026)
 assert all(1900 < year < 2026 for year in GOVERNOR_LAST_ELECTED.values())
 assert set(SENATE_LAST_CONTESTED) == set(SENATE_STATES_2026)
 assert all(1900 < year < 2026 for year in SENATE_LAST_CONTESTED.values())
-assert REDISTRICTING_AFFECTED_DISTRICTS <= set(HOUSE_DISTRICTS)
+assert REDRAWN_SINCE_2024 <= set(HOUSE_DISTRICTS)
 
 RACES = {
     "president": {
