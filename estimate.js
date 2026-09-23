@@ -79,9 +79,9 @@ function confidenceWeight(percentIn, reportingVoteFraction) {
 }
 
 // An area's own best-guess eventual vote total: self-extrapolated from its
-// own percentIn if it has reported anything (identical math to flatPredict's
-// implicit total), otherwise the historical baseline's own past total as a
-// stand-in for an area that hasn't reported at all yet. Null if neither is
+// own percentIn if it has reported anything (all-party totalVotes, unlike
+// flatPredict's two-party total), otherwise the historical baseline's own
+// past total as a stand-in for an area that hasn't reported at all yet. Null if neither is
 // available (no live data AND no historical coverage) - genuinely unknown,
 // not a number to guess at.
 function expectedTotalVotes(area, historicalEntry) {
@@ -123,7 +123,7 @@ function flatPredict(demReal, repReal, percentIn) {
  *
  * area: { demReal, repReal, percentIn, totalVotes } - no per-area
  *   totalExpected: NBC only publishes that at the state level, so an area's
- *   own remaining vote is derived from its own percentIn/totalVotes instead
+ *   own remaining vote is derived from its own percentIn and D+R counted instead
  *   (identical to how the flat formula always worked).
  * historicalEntry: this area's entry from historical_<race>.json, or
  *   null/undefined if it has none.
@@ -156,7 +156,7 @@ function estimateArea(area, historicalEntry, reportingVoteFraction) {
   const swing = observedSwing(demReal, repReal, historical);
   const weight = confidenceWeight(percentIn, reportingVoteFraction);
   const remainingShare = projectedRemainingShare(historical, swing, weight);
-  const remainingVotes = totalVotes * (100 - percentIn) / percentIn;
+  const remainingVotes = (demReal + repReal) * (100 - percentIn) / percentIn;
   const { demPredicted, repPredicted } =
     predictFromRemainingShare(demReal, repReal, remainingVotes, remainingShare);
 
@@ -167,17 +167,12 @@ function estimateArea(area, historicalEntry, reportingVoteFraction) {
 }
 
 const api = {
-  clamp,
-  historicalShare,
   observedSwing,
   confidenceWeight,
   expectedTotalVotes,
   projectedRemainingShare,
-  predictFromRemainingShare,
   flatPredict,
   estimateArea,
-  VOTE_TRUST_THRESHOLD,
-  AREA_VOTE_TRUST_THRESHOLD,
 };
 
 if (typeof module !== "undefined" && module.exports) {

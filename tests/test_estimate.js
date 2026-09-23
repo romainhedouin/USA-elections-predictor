@@ -1,4 +1,4 @@
-// Pure-math unit tests for estimate.js. Run with `node --test tests/`.
+// Pure-math unit tests for estimate.js. Run with `node --test tests/test_estimate.js`.
 // No browser, no Selenium - see tests/README.md for why the rest of this
 // suite needs a real browser and this file doesn't.
 "use strict";
@@ -104,6 +104,14 @@ test("estimateArea falls back to the flat formula with no historical baseline", 
   assert.equal(result.usedFallback, true);
   assert.equal(result.demPredicted, 1200);
   assert.equal(result.repPredicted, 800);
+});
+
+test("estimateArea's swing path projects the same two-party total as flatPredict", () => {
+  const area = { demReal: 450, repReal: 450, percentIn: 50, totalVotes: 1000 };
+  const result = estimateArea(area, { demShare: 0.5, repShare: 0.5 }, 1);
+  const flat = flatPredict(450, 450, 50);
+  assert.equal(result.demPredicted + result.repPredicted, 1800);
+  assert.equal(flat.demPredicted + flat.repPredicted, 1800);
 });
 
 // Worked scenarios: swing agreeing vs. contradicting history, at 10% and
