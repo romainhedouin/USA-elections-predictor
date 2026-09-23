@@ -29,6 +29,8 @@ import json
 from pathlib import Path
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from races import HOUSE_DISTRICTS as _HOUSE_DISTRICTS
 
@@ -41,6 +43,14 @@ TIMEOUT = (5, 30)  # (connect, read) seconds
 # Shared so repeated NBC requests reuse one keep-alive connection pool.
 _SESSION = requests.Session()
 _SESSION.headers["User-Agent"] = USER_AGENT
+# One retry for connect errors and transient 5xx/429s. Read timeouts are not
+# retried, and Retry-After is ignored, so a slow NBC can't multiply the
+# per-request time past server.py's FETCH_TIMEOUT.
+_SESSION.mount("https://", HTTPAdapter(max_retries=Retry(
+    total=1, connect=1, read=0, status=1, backoff_factor=1,
+    status_forcelist=(429, 500, 502, 503, 504), allowed_methods=frozenset({"GET"}),
+    respect_retry_after_header=False, raise_on_status=False,
+)))
 
 # Geographies whose reporting units are actual counties, and therefore line up
 # with the county boundaries the map draws.

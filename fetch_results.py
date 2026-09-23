@@ -3,11 +3,9 @@
     python fetch_results.py --race president|senate|governor|house
 
 One HTTP call per state against NBC's results API (see nbc_api.py) for
-president/senate/governor - which replaced a Selenium browser driving every
-state page, kept in legacy/ as a fallback if NBC ever retires the API. House
-is one HTTP call total: NBC's national House payload is already broken down
-by district, so there's no per-state loop for it (see
-nbc_api.house_results()).
+president/senate/governor. House is one HTTP call total: NBC's national House
+payload is already broken down by district, so there's no per-state loop for
+it (see nbc_api.house_results()).
 
 This file writes real vote counts only - no extrapolation. Projecting each
 area's current vote share to 100% reporting (flat, or the historical-swing
@@ -33,6 +31,7 @@ import nbc_api
 from races import CSV_HEADER, HOUSE_DISTRICTS, RACES, race_files
 
 WORKERS = 8  # parallel NBC state requests; keep <= the HTTP pool size (10)
+EXIT_PARTIAL = 3  # some states failed; the file was still written
 
 
 def state_rows(payload):
@@ -128,7 +127,7 @@ def fetch_race(race, cycle, skip):
     last_modified = None
     for state_slug, payload, error in results:
         if error:
-            failures.append(f"{state_slug} ({error})")
+            failures.append((state_slug, error))
             continue
         if payload is None:
             continue  # no race of this type in this state - routine
@@ -144,6 +143,28 @@ def fetch_race(race, cycle, skip):
         # and the map says so rather than inventing a county breakdown.
         print(f"Reported below county level, so no county map: {', '.join(sorted(no_county))}")
     return rows, failures, last_modified
+
+
+def _state_slug(state_name):
+    return state_name.lower().replace(" ", "-")  # NBC's URL slug for a state
+
+
+def carried_forward_rows(previous_csv, failed_slugs, cycle):
+    """The failed states' rows from the currently served CSV, if it is live
+    data from the same cycle - never mock fixtures or another year's count."""
+    try:
+        meta = json.loads(previous_csv.with_suffix(".meta.json").read_text(encoding="utf-8"))
+        if meta.get("source") != "live" or str(meta.get("dataYear")) != str(cycle):
+            return []
+        with open(previous_csv, newline="", encoding="utf-8") as file:
+            reader = csv.reader(file, delimiter=";")
+            next(reader, None)
+            kept = [row for row in reader if row and _state_slug(row[0]) in failed_slugs]
+    except (OSError, ValueError):
+        return []
+    if kept:
+        print(f"Kept previous rows for {', '.join(sorted({row[0] for row in kept}))}")
+    return kept
 
 
 def write_meta(output_csv, race, cycle, rows, source, last_modified=None):
@@ -189,6 +210,8 @@ def main():
                         help="Year in NBC's URL path (default: the race's nbc_cycle in races.py)")
     parser.add_argument("--out-dir", default=".", help="Where to write the CSV (default: current directory)")
     parser.add_argument("--skip", default="", help="Comma-separated state slugs to skip, e.g. alaska,hawaii")
+    parser.add_argument("--previous", type=Path,
+                        help="Currently served CSV: a failed state keeps its rows from it, if it holds live data")
     args = parser.parse_args()
 
     race = RACES[args.race]
@@ -198,6 +221,8 @@ def main():
 
     print(f"{race['label']} {race['election_year']} results, from NBC's {cycle} pages")
     rows, failures, last_modified = fetch_race(args.race, cycle, skip)
+    if failures and args.previous:
+        rows += carried_forward_rows(args.previous, {slug for slug, _ in failures}, cycle)
 
     if not rows:
         sys.exit(f"No results parsed - refusing to overwrite {output_csv}.")
@@ -208,9 +233,10 @@ def main():
     print(f"Wrote {len(rows)} rows across {states} states to {output_csv}")
 
     if failures:
-        # The good states are already written; exit non-zero so a scheduler
-        # notices rather than treating a partial refresh as a clean one.
-        sys.exit(f"Failed: {', '.join(failures)}")
+        # The good states are already written; a distinct exit code lets a
+        # scheduler serve this partial file while still flagging the failure.
+        print(f"Failed: {', '.join(f'{slug} ({error})' for slug, error in failures)}")
+        sys.exit(EXIT_PARTIAL)
 
 
 if __name__ == "__main__":

@@ -15,8 +15,8 @@ Fast subset (no browser, a few seconds):
 
 ```
 python -m pytest tests/test_nbc_api.py tests/test_historical_baseline.py \
-  tests/test_generate_mock_data.py tests/test_generate_raw_data.py \
-  tests/test_server_district_cache.py
+  tests/test_generate_mock_data.py \
+  tests/test_server_district_cache.py tests/test_partial_refresh.py
 ```
 
 The browser suite builds a throwaway site in a temp directory from `map.html`
@@ -36,8 +36,8 @@ Each test is a regression for something that actually shipped broken:
 | `test_nbc_api.py` *(no browser)* | `nbc_api.py`'s payload normalisation for state and district results. |
 | `test_historical_baseline.py` *(no browser)* | `scripts/build_historical_baseline.py`'s join and aggregation logic. |
 | `test_generate_mock_data.py` *(no browser)* | the mock CSV's header, delimiter and row shape. |
-| `test_generate_raw_data.py` *(no browser)* | `legacy/generate_raw_data.py` writing columns out of order under `CSV_HEADER`. Skipped if `bs4` isn't installed. |
 | `test_server_district_cache.py` *(no browser)* | `server.py`'s district cache growing past the 435 real districts, or concurrent misses each calling NBC. |
+| `test_partial_refresh.py` *(no browser)* | one failed state freezing a whole race's refresh: failed states must carry forward from the served live CSV (never mock data) and the server must publish but report `degraded`; plus NBC's one-shot retry. |
 | `test_estimate.js` *(Node, no browser)* | `estimate.js`'s flat and historical-swing projection maths. |
 
 Adding a viewport to `VIEWPORTS` in `conftest.py` extends every parametrised

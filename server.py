@@ -67,6 +67,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import fetch_results
 import nbc_api
 # Aliased: this module already uses RACES for its own "which races are
 # actively refreshed" tuple (see ALL_RACES/_parse_races below) - importing
@@ -204,7 +205,7 @@ def _record(race, *, ok, duration, error=None, source="fetch"):
         entry["last_duration_seconds"] = round(duration, 2)
         if ok:
             entry["last_success"] = _now_iso()
-            entry["last_error"] = None
+            entry["last_error"] = error  # set only for a partial refresh
             entry["consecutive_failures"] = 0
             entry["source"] = source
         else:
@@ -287,14 +288,19 @@ def refresh_race(race, *, use_mock=False):
         script = "generate_mock_data.py" if use_mock else "fetch_results.py"
         argv = [sys.executable, str(REPO_DIR / script), "--race", race,
                 "--out-dir", str(staging)]
-        if DATA_YEAR and not use_mock:
-            argv += ["--nbc-cycle", DATA_YEAR]
+        if not use_mock:
+            argv += ["--previous", str(target)]
+            if DATA_YEAR:
+                argv += ["--nbc-cycle", DATA_YEAR]
 
         code, output = _run(argv, FETCH_TIMEOUT, label)
         duration = time.monotonic() - started
+        tail = output.splitlines()[-1] if output else "(no output)"
+        # A partial fetch still wrote a CSV (failed states carried forward), so
+        # it is promoted like a success but reported as degraded.
+        partial = not use_mock and code == fetch_results.EXIT_PARTIAL
 
-        if code != 0:
-            tail = output.splitlines()[-1] if output else "(no output)"
+        if code != 0 and not partial:
             _record(race, ok=False, duration=duration,
                     error=f"{script} exited {code}: {tail[:400]}")
             log.error("refresh race=%s status=failed exit=%s duration=%.1fs kept=%s | %s",
@@ -340,9 +346,10 @@ def refresh_race(race, *, use_mock=False):
 
         duration = time.monotonic() - started
         _record(race, ok=True, duration=duration,
+                error=f"partial: {tail[:400]}" if partial else None,
                 source="mock-seed" if use_mock else "fetch")
-        log.info("refresh race=%s status=ok rows=%s bytes=%s duration=%.1fs source=%s",
-                 race, detail, target.stat().st_size, duration,
+        log.info("refresh race=%s status=%s rows=%s bytes=%s duration=%.1fs source=%s",
+                 race, "partial" if partial else "ok", detail, target.stat().st_size, duration,
                  "mock" if use_mock else "fetch")
         return True
 
@@ -586,7 +593,7 @@ def health_payload():
 
     tracked = [races[r] for r in RACES]
     all_present = all(r["csv_present"] for r in tracked)
-    any_failing = any(r["consecutive_failures"] > 0 for r in tracked)
+    any_failing = any(r["consecutive_failures"] > 0 or r["last_error"] for r in tracked)
     # 200 as long as we can still serve every configured race, even if the
     # refreshes are failing - a stale map is a working map, and a health check
     # that fails on stale data would roll back a perfectly serviceable deploy.
