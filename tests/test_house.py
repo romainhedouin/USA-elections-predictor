@@ -13,71 +13,10 @@ HTTP server that serves the same site plus a stubbed /house-district/<geoid>
 route, instead of hitting server.py or NBC at all.
 """
 
-import json
-import threading
-import time
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-
 import pytest
 from selenium.webdriver.support.ui import WebDriverWait
 
-from conftest import VIEWPORTS, make_driver, severe_logs, wait_ready
-
-OPEN_HOUSE_TAB = """
-const btn = [...document.querySelectorAll('#race-tabs button')].find(b => b.textContent.includes('House'));
-btn.click();"""
-
-# A minimal, real-shaped stand-in for what server.py's proxy (and, upstream of
-# it, NBC) returns - see nbc_api.district_results() for the real fields.
-STUB_DISTRICT = {
-    "geoid": "0601",
-    "label": "California District 1",
-    "state": "California",
-    "geography": "counties",
-    "countyLevel": True,
-    "totalExpected": 100000,
-    "percentIn": 100.0,
-    "demName": "Rose Yee",
-    "repName": "Doug LaMalfa",
-    "lastModified": None,
-    "areas": [
-        {"name": "Butte", "fips": "06007", "percentIn": 100.0, "votes": 92708,
-         "demReal": 41729, "repReal": 50979},
-        {"name": "Colusa", "fips": "06011", "percentIn": 100.0, "votes": 6623,
-         "demReal": 2095, "repReal": 4528},
-    ],
-}
-
-
-def make_handler(directory):
-    stub_body = json.dumps(STUB_DISTRICT).encode("utf-8")
-
-    class StubbingHandler(SimpleHTTPRequestHandler):
-        def do_GET(self):
-            if self.path == "/house-district/0601":
-                # A same-machine loopback response can land before the test
-                # even gets to check for the loading state - delay just
-                # enough to make that state reliably observable rather than
-                # racy.
-                time.sleep(0.2)
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(stub_body)))
-                self.end_headers()
-                self.wfile.write(stub_body)
-                return
-            if self.path.startswith("/house-district/"):
-                self.send_response(404)
-                self.send_header("Content-Length", "0")
-                self.end_headers()
-                return
-            super().do_GET()
-
-        def log_message(self, *args):
-            pass  # keep pytest output readable
-
-    return partial(StubbingHandler, directory=str(directory))
+from conftest import STUB_CA01, VIEWPORTS, click_district, house_pages, severe_logs, wait_for_note
 
 
 @pytest.fixture
@@ -85,37 +24,7 @@ def house_page(site):
     """Like conftest's `page`, but backed by a server that also stubs
     /house-district/0601 - real district drill-down data, a real 404 for
     every other geoid, no network."""
-    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(site))
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    base_url = f"http://127.0.0.1:{server.server_address[1]}"
-    drivers = []
-
-    def open_page(viewport="desktop"):
-        width, height, mobile = VIEWPORTS[viewport]
-        driver = make_driver(width, height, mobile)
-        drivers.append(driver)
-        driver.get(f"{base_url}/map.html")
-        wait_ready(driver)
-        driver.execute_script(OPEN_HOUSE_TAB)
-        WebDriverWait(driver, 25).until(
-            lambda d: d.execute_script(
-                "return document.querySelector('#race-tabs button[aria-pressed=\"true\"]')"
-                ".textContent.startsWith('House')"))
-        return driver
-
-    yield open_page
-    for driver in drivers:
-        driver.quit()
-    server.shutdown()
-
-
-def click_district(driver, geoid):
-    driver.execute_script("""
-        const geoid = arguments[0];
-        const p = [...document.querySelectorAll('#map path.state')]
-          .find(el => el.__data__ && el.__data__.id === geoid);
-        p.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-    """, geoid)
+    yield from house_pages(site, {"0601": STUB_CA01}, delay=0.2, default_viewport="desktop")
 
 
 def test_house_renders_all_435_districts(house_page):
@@ -146,9 +55,7 @@ def test_district_drilldown_renders_fetched_counties(house_page):
     driver = house_page()
     click_district(driver, "0601")
 
-    WebDriverWait(driver, 10).until(
-        lambda d: "loading" not in d.execute_script(
-            "return document.querySelector('#overlay-note').textContent").lower())
+    wait_for_note(driver)
 
     assert driver.execute_script("return document.querySelector('#overlay-title').textContent") == "California District 1"
     assert driver.execute_script("return document.querySelectorAll('#state-map path.county').length") == 2
@@ -163,9 +70,7 @@ def test_district_drilldown_shows_error_when_the_fetch_fails(house_page):
     driver = house_page()
     click_district(driver, "0602")
 
-    WebDriverWait(driver, 10).until(
-        lambda d: "loading" not in d.execute_script(
-            "return document.querySelector('#overlay-note').textContent").lower())
+    wait_for_note(driver)
     note = driver.execute_script("return document.querySelector('#overlay-note').textContent")
     assert "could not load" in note.lower()
 
@@ -179,9 +84,7 @@ def test_closing_and_opening_a_different_district_does_not_show_stale_data(house
     assert not driver.execute_script("return document.querySelector('#overlay').classList.contains('open')")
 
     click_district(driver, "0602")
-    WebDriverWait(driver, 10).until(
-        lambda d: "loading" not in d.execute_script(
-            "return document.querySelector('#overlay-note').textContent").lower())
+    wait_for_note(driver)
     note = driver.execute_script("return document.querySelector('#overlay-note').textContent")
     assert "could not load" in note.lower()
 

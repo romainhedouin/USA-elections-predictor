@@ -17,39 +17,16 @@ function - the point is to pin the *behavior*, not the implementation, so a
 readability-only refactor can be verified not to have changed anything.
 """
 
-import json
 import re
-import threading
-import time
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
-from selenium.webdriver.support.ui import WebDriverWait
 
-from conftest import OPEN_STATE, make_driver, severe_logs, wait_ready
+from conftest import (OPEN_STATE, STUB_CA01, click_district, house_pages,
+                      severe_logs, wait_for_note)
 
-# A district that reports by county, fully counted, with a real D/R skew -
-# exercises the shared "percent in / total ballots / certain-or-projected
-# leader" tail (districtSummary) with no geography caveat attached.
-STUB_COUNTY_DISTRICT = {
-    "geoid": "0601",
-    "label": "California District 1",
-    "state": "California",
-    "geography": "counties",
-    "countyLevel": True,
-    "totalExpected": 100000,
-    "percentIn": 100.0,
-    "demName": "Rose Yee",
-    "repName": "Doug LaMalfa",
-    "lastModified": None,
-    "areas": [
-        {"name": "Butte", "fips": "06007", "percentIn": 100.0, "votes": 92708,
-         "demReal": 41729, "repReal": 50979},
-        {"name": "Colusa", "fips": "06011", "percentIn": 100.0, "votes": 6623,
-         "demReal": 2095, "repReal": 4528},
-    ],
-}
+# STUB_CA01 (conftest) is a district that reports by county, fully counted,
+# with a real D/R skew - exercises the shared "percent in / total ballots /
+# certain-or-projected leader" tail (districtSummary) with no geography caveat.
 
 # A district that reports by a non-county geography - exercises the
 # camelCase-to-words transform at both of its call sites in the district
@@ -73,72 +50,11 @@ STUB_NONCOUNTY_DISTRICT = {
     ],
 }
 
-STUBS = {"0601": STUB_COUNTY_DISTRICT, "0602": STUB_NONCOUNTY_DISTRICT}
-
-OPEN_HOUSE_TAB = """
-const btn = [...document.querySelectorAll('#race-tabs button')].find(b => b.textContent.includes('House'));
-btn.click();"""
-
-
-def click_district(driver, geoid):
-    driver.execute_script("""
-        const geoid = arguments[0];
-        const p = [...document.querySelectorAll('#map path.state')]
-          .find(el => el.__data__ && el.__data__.id === geoid);
-        p.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-    """, geoid)
-
-
-def wait_for_note(driver):
-    WebDriverWait(driver, 10).until(
-        lambda d: "loading" not in d.execute_script(
-            "return document.querySelector('#overlay-note').textContent").lower())
-
-
-def make_handler(directory):
-    class StubbingHandler(SimpleHTTPRequestHandler):
-        def do_GET(self):
-            for geoid, stub in STUBS.items():
-                if self.path == f"/house-district/{geoid}":
-                    body = json.dumps(stub).encode("utf-8")
-                    time.sleep(0.05)
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                    return
-            super().do_GET()
-
-        def log_message(self, *args):
-            pass
-
-    return partial(StubbingHandler, directory=str(directory))
-
 
 @pytest.fixture
 def house_page(site):
-    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(site))
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    base_url = f"http://127.0.0.1:{server.server_address[1]}"
-    drivers = []
-
-    def open_page():
-        driver = make_driver(1440, 900, False)
-        drivers.append(driver)
-        driver.get(f"{base_url}/map.html")
-        wait_ready(driver)
-        driver.execute_script(OPEN_HOUSE_TAB)
-        WebDriverWait(driver, 25).until(
-            lambda d: d.execute_script(
-                "return document.querySelector('#race-tabs button[aria-pressed=\"true\"]')"
-                ".textContent.startsWith('House')"))
-        return driver
-
-    yield open_page
-    for driver in drivers:
-        driver.quit()
-    server.shutdown()
+    yield from house_pages(site, {"0601": STUB_CA01, "0602": STUB_NONCOUNTY_DISTRICT},
+                           delay=0.05, default_viewport="laptop")
 
 
 # ---------- districtSummary's shared tail (finding: stateSummary/
