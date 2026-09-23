@@ -147,7 +147,6 @@ RACES = {
         "nbc_slug": "president",
         "election_year": 2028,  # Tue 7 Nov 2028
         "nbc_cycle": "2024",    # NBC has no 2028 pages yet (404); bump on election night
-        "hub_h2": "All Presidential races",  # NBC uses the adjective form only for president
         "weights": ELECTORAL_VOTES,
     },
     "senate": {
@@ -155,7 +154,6 @@ RACES = {
         "nbc_slug": "senate",
         "election_year": 2026,  # Tue 3 Nov 2026
         "nbc_cycle": "2024",    # /politics/2026-elections/senate-results is a 404 today
-        "hub_h2": "All Senate races",
         "weights": {state: 1 for state in SENATE_STATES_2026},
     },
     "governor": {
@@ -163,7 +161,6 @@ RACES = {
         "nbc_slug": "governor",
         "election_year": 2026,  # Tue 3 Nov 2026
         "nbc_cycle": "2024",    # /politics/2026-elections/governor-results is a 404 today
-        "hub_h2": "All Governor races",
         "weights": {state: 1 for state in GOVERNOR_STATES_2026},
     },
     "house": {
@@ -171,7 +168,6 @@ RACES = {
         "nbc_slug": "house",
         "election_year": 2026,  # Tue 3 Nov 2026
         "nbc_cycle": "2024",    # /politics/2026-elections/house-results is a 404 today
-        "hub_h2": "All House races",
         # Every one of the 435 seats is up every cycle, keyed by district
         # GEOID rather than state name - a different key space than the other
         # three races' weights, which map.html has to know about.
@@ -209,15 +205,10 @@ CSV_HEADER = [
 
 
 def race_files(race):
-    """Where a race's inputs and outputs live.
+    """Where a race's output lives.
 
-    President keeps the unsuffixed names it had before multi-race support, so
-    existing files and muscle memory still work. The scrape cache is always
-    per-race (states/<race>/<state>/) so runs can't overwrite each other.
+    President keeps the unsuffixed name it had before multi-race support, so
+    existing files and muscle memory still work.
     """
     suffix = "" if race == "president" else f"_{race}"
-    return {
-        "states_dir": Path("states") / race,
-        "nbc_states_file": Path(f"nbc_states{suffix}.json"),
-        "output_csv": Path(f"raw_data{suffix}.csv"),
-    }
+    return {"output_csv": Path(f"raw_data{suffix}.csv")}

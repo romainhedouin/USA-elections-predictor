@@ -91,7 +91,6 @@ a state/district where the raw leader disagrees with the projected winner.
 | `generate_mock_data.py` | fictional fixtures, same schema |
 | `static/` | checked-in reference data: county FIPS table, district topology, historical baselines |
 | `scripts/` | one-time/rare build scripts that regenerate `static/`'s contents |
-| `legacy/` | the superseded Selenium scraper, kept as a fallback |
 | `tests/` | layout regressions (Selenium) + unit tests (Python and Node) |
 | `DEPLOY.md` | Railway setup |
 
