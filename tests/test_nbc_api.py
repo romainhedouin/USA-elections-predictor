@@ -8,12 +8,6 @@ pin down the exact returned dict for both functions against realistic input,
 so the extraction can't quietly change a value or drop a key.
 """
 
-import sys
-from pathlib import Path
-
-REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO))
-
 import nbc_api
 
 STATE_PAYLOAD = {

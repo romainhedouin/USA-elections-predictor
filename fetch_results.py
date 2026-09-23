@@ -32,6 +32,8 @@ import requests
 import nbc_api
 from races import CSV_HEADER, HOUSE_DISTRICTS, RACES, race_files
 
+WORKERS = 8  # parallel NBC state requests; keep <= the HTTP pool size (10)
+
 
 def state_rows(payload):
     """One CSV row per reporting area of a state."""
@@ -85,37 +87,29 @@ def house_rows(districts):
     return rows
 
 
-def fetch_house_race(cycle):
+def _or_exit_on_404(fn, race, cycle, *args):
     try:
-        districts, last_modified = nbc_api.house_results(cycle)
+        return fn(*args)
     except requests.HTTPError as error:
-        status = error.response.status_code if error.response is not None else "?"
-        if status == 404:
-            sys.exit(f"No house results published for {cycle} yet (404). "
-                     f"Nothing to fetch; existing data is left alone.")
-        raise
-    return house_rows(districts), [], last_modified
-
-
-def fetch_race(race, cycle, skip, workers=8):
-    if race == "house":
-        # One national payload, not one request per state - see
-        # nbc_api.house_results(). --skip has no meaning here (there is no
-        # per-state fetch to skip) and is silently ignored.
-        return fetch_house_race(cycle)
-
-    race_slug = RACES[race]["nbc_slug"]
-    try:
-        published = nbc_api.state_slugs(race_slug, cycle)
-    except requests.HTTPError as error:
-        status = error.response.status_code if error.response is not None else "?"
-        if status == 404:
+        if error.response is not None and error.response.status_code == 404:
             # Routine before an election: the cycle only exists once there are
             # results. Say so in one line rather than a traceback - a scheduler
             # will hit this on every run for weeks beforehand.
             sys.exit(f"No {race} results published for {cycle} yet (404). "
                      f"Nothing to fetch; existing data is left alone.")
         raise
+
+
+def fetch_race(race, cycle, skip):
+    if race == "house":
+        # One national payload, not one request per state - see
+        # nbc_api.house_results(). --skip has no meaning here (there is no
+        # per-state fetch to skip) and is silently ignored.
+        districts, last_modified = _or_exit_on_404(nbc_api.house_results, race, cycle, cycle)
+        return house_rows(districts), [], last_modified
+
+    race_slug = RACES[race]["nbc_slug"]
+    published = _or_exit_on_404(nbc_api.state_slugs, race, cycle, race_slug, cycle)
 
     slugs = [s for s in published if s not in skip]
     if not slugs:
@@ -127,7 +121,7 @@ def fetch_race(race, cycle, skip, workers=8):
         except (requests.RequestException, ValueError, KeyError) as error:
             return state_slug, None, f"{type(error).__name__}: {error}"
 
-    with ThreadPoolExecutor(workers) as pool:
+    with ThreadPoolExecutor(WORKERS) as pool:
         results = list(pool.map(one, slugs))
 
     rows, failures, no_county = [], [], []
@@ -139,7 +133,9 @@ def fetch_race(race, cycle, skip, workers=8):
         if payload is None:
             continue  # no race of this type in this state - routine
         rows.extend(state_rows(payload))
-        last_modified = payload.get("last_modified") or last_modified
+        lm = payload.get("last_modified")
+        if lm and (last_modified is None or lm > last_modified):
+            last_modified = lm  # ISO-8601 Z strings sort chronologically
         if not payload["county_level"]:
             no_county.append(f"{payload['state']} ({payload['geography']})")
 
@@ -170,7 +166,9 @@ def write_meta(output_csv, race, cycle, rows, source, last_modified=None):
         "states": len({row[0] for row in rows}),
     }
     meta_path = output_csv.with_suffix(".meta.json")
-    meta_path.write_text(json.dumps(meta, indent=1) + "\n", encoding="utf-8")
+    tmp = meta_path.with_name(meta_path.name + ".tmp")
+    tmp.write_text(json.dumps(meta, indent=1) + "\n", encoding="utf-8")
+    os.replace(tmp, meta_path)
 
 
 def write_csv(rows, output_csv):

@@ -30,11 +30,17 @@ from pathlib import Path
 
 import requests
 
+from races import HOUSE_DISTRICTS as _HOUSE_DISTRICTS
+
 BASE_URL = "https://www.nbcnews.com/firecracker/api/v2"
 # NBC's edge is happy with a plain client; identify honestly rather than
 # impersonating a browser.
 USER_AGENT = "usa-elections-predictor/1.0 (+https://github.com/romainhedouin/USA-elections-predictor)"
 TIMEOUT = (5, 30)  # (connect, read) seconds
+
+# Shared so repeated NBC requests reuse one keep-alive connection pool.
+_SESSION = requests.Session()
+_SESSION.headers["User-Agent"] = USER_AGENT
 
 # Geographies whose reporting units are actual counties, and therefore line up
 # with the county boundaries the map draws.
@@ -44,11 +50,6 @@ COUNTY_GEOGRAPHIES = {"counties", "parishes"}
 # build_fips_table.py; see that script for why this is a table and not a
 # name match done at runtime.
 FIPS_TABLE = json.loads((Path(__file__).parent / "static" / "county_fips.json").read_text(encoding="utf-8"))
-
-# (district GEOID) -> {state, label}. Built once by scripts/build_district_topology.sh
-# from the Census shapefile - see that script. Used here only to fix up NBC's
-# at-large district numbering (see _fix_at_large_geoid below).
-_HOUSE_DISTRICTS = json.loads((Path(__file__).parent / "static" / "house_districts.json").read_text(encoding="utf-8"))
 
 # The Census GEOID standard - what the district topology and house_districts
 # table both use - numbers an at-large state's lone district "00". NBC's own
@@ -65,9 +66,19 @@ def _fix_at_large_geoid(geoid):
 
 
 def _get(url):
-    response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+    response = _SESSION.get(url, timeout=TIMEOUT)
     response.raise_for_status()
     return response.json()
+
+
+def _get_or_none(url):
+    """_get(), but None on a 404 (NBC has no such page)."""
+    try:
+        return _get(url)
+    except requests.HTTPError as error:
+        if error.response is not None and error.response.status_code == 404:
+            return None
+        raise
 
 
 def state_slugs(race_slug, cycle):
@@ -99,14 +110,8 @@ def state_results(state_slug, race_slug, cycle):
     is routine: most states have no Senate or governor race in a given cycle.
     """
     url = f"{BASE_URL}/state-results/{cycle}-elections/{state_slug}-{race_slug}-results"
-    try:
-        payload = _get(url)
-    except requests.HTTPError as error:
-        if error.response is not None and error.response.status_code == 404:
-            return None
-        raise
-
-    races = payload.get("races") or []
+    payload = _get_or_none(url)
+    races = payload and payload.get("races")
     if not races:
         return None
     # Maine and Nebraska split their electoral votes, so NBC publishes a second
@@ -146,14 +151,8 @@ def district_results(geoid, cycle):
     district_num = 1 if geoid[:2] in _AT_LARGE_STATE_FIPS else int(geoid[2:])
 
     url = f"{BASE_URL}/state-results/{cycle}-elections/{state_slug}-us-house-district-{district_num}-results"
-    try:
-        payload = _get(url)
-    except requests.HTTPError as error:
-        if error.response is not None and error.response.status_code == 404:
-            return None
-        raise
-
-    races = payload.get("races") or []
+    payload = _get_or_none(url)
+    races = payload and payload.get("races")
     if not races:
         return None
     race = races[0]
@@ -221,7 +220,6 @@ def house_results(cycle):
         votes = int(tooltip.get("totalVote") or 0)
         districts.append({
             "geoid": _fix_at_large_geoid(geoid),
-            "race_name": tooltip.get("raceName") or geoid,
             "percent_in": float(tooltip.get("percentIn") or 0),
             "votes": votes,
             "total_expected": votes + int(tooltip.get("remainingVote") or 0),
