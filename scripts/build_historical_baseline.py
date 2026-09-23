@@ -112,10 +112,16 @@ def _two_party_share(dem_votes, rep_votes):
     historical total is the only estimate of its eventual size we have - see
     estimate.js's expectedTotalVotes().
     """
-    total = dem_votes + rep_votes
-    if total <= 0:
+    # Uncontested (one major party absent) would give a degenerate 0%/100% baseline.
+    if dem_votes <= 0 or rep_votes <= 0:
         return None
-    return {"demShare": dem_votes / total, "repShare": rep_votes / total, "votes": total}
+    total = dem_votes + rep_votes
+    return {"demShare": round(dem_votes / total, 4), "repShare": round(rep_votes / total, 4), "votes": total}
+
+
+def _county_fips(row):
+    raw = (row.get("county_fips") or "").strip()
+    return raw.zfill(5) if raw.isdigit() else None
 
 
 def president_baseline(rows, year):
@@ -127,8 +133,8 @@ def president_baseline(rows, year):
         party = _party_of(row)
         if party is None:
             continue
-        fips = (row.get("county_fips") or "").strip().zfill(5)
-        if not fips:
+        fips = _county_fips(row)
+        if fips is None:
             continue
         bucket = votes.setdefault(fips, {"dem": 0, "rep": 0})
         bucket[party] += int(float(row.get("candidatevotes") or 0))
@@ -150,8 +156,8 @@ def president_baseline_wide(rows):
     """
     baseline = {}
     for row in rows:
-        fips = (row.get("county_fips") or "").strip().zfill(5)
-        if not fips:
+        fips = _county_fips(row)
+        if fips is None:
             continue
         dem = int(float(row.get("votes_dem") or 0))
         rep = int(float(row.get("votes_gop") or 0))
@@ -186,7 +192,7 @@ def house_baseline_state_apportioned(rows, year):
             continue
         per_district = total / len(geoids)
         for geoid in geoids:
-            baseline[geoid] = {"votes": per_district, "year": year}
+            baseline[geoid] = {"votes": round(per_district), "year": year}
     return baseline
 
 
@@ -218,6 +224,8 @@ def house_baseline_county_weighted(relationship_rows, county_votes, year):
     urban districts of nearly all of Maricopa's real vote count and handed
     it to whichever district happened to grab the empty desert instead.
     """
+    # Drops the Census "ZZ" water pseudo-districts and DC's delegate "98".
+    relationship_rows = [r for r in relationship_rows if r["GEOID_CD119_20"] in HOUSE_DISTRICTS]
     by_state = {}
     for row in relationship_rows:
         state_fips = row["GEOID_CD119_20"][:2]
@@ -269,7 +277,7 @@ def house_baseline_county_weighted(relationship_rows, county_votes, year):
 
         district_votes.update(state_district_votes)
 
-    return {geoid: {"votes": votes, "year": year} for geoid, votes in district_votes.items() if votes > 0}
+    return {geoid: {"votes": round(votes), "year": year} for geoid, votes in district_votes.items() if votes > 0}
 
 
 def _house_geoid(state, district_raw):
@@ -402,8 +410,8 @@ def main():
             raise SystemExit("--format house-county-weighted only covers house")
         if not args.counties:
             raise SystemExit("--format house-county-weighted requires --counties <wide president CSV>")
-        county_votes = {(r.get("county_fips") or "").strip().zfill(5): int(float(r.get("total_votes") or 0))
-                         for r in _read_rows(args.counties)}
+        county_votes = {fips: int(float(r.get("total_votes") or 0))
+                         for r in _read_rows(args.counties) if (fips := _county_fips(r)) is not None}
         baseline = house_baseline_county_weighted(rows, county_votes, HOUSE_LAST_ELECTED)
     elif args.race == "president":
         baseline = president_baseline(rows, PRESIDENT_LAST_ELECTED)
@@ -415,7 +423,7 @@ def main():
         baseline = statewide_baseline(rows, "GOVERNOR", GOVERNOR_LAST_ELECTED)
 
     output = args.output or Path(__file__).resolve().parent.parent / "static" / f"historical_{args.race}.json"
-    output.write_text(json.dumps(baseline, indent=1, sort_keys=True), encoding="utf-8")
+    output.write_text(json.dumps(baseline, separators=(",", ":"), sort_keys=True), encoding="utf-8")
     print(f"wrote {len(baseline)} areas to {output}")
 
 

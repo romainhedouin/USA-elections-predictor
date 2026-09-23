@@ -6,9 +6,7 @@ module has no rendering to check.
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import build_historical_baseline as bhb
 import races
@@ -107,3 +105,31 @@ def test_party_of_falls_back_to_party_simplified_and_party_detailed():
     assert bhb._party_of({"party_detailed": "REPUBLICAN-CONSERVATIVE"}) == "rep"
     assert bhb._party_of({"party": "DEMOCRAT", "party_simplified": "OTHER"}) == "dem"  # "party" wins if present
     assert bhb._party_of({"party_simplified": "OTHER"}) is None
+
+
+def test_statewide_baseline_skips_uncontested_races():
+    rows = [
+        {"year": "2020", "state": "Alabama", "office": "US SENATE", "party": "REPUBLICAN", "candidatevotes": "65"},
+        {"year": "2020", "state": "Alabama", "office": "US SENATE", "party": "LIBERTARIAN", "candidatevotes": "35"},
+    ]
+    assert bhb.statewide_baseline(rows, "SENATE", races.SENATE_LAST_CONTESTED) == {}
+
+
+def test_president_baseline_wide_skips_blank_and_na_fips():
+    rows = [{"county_fips": fips, "votes_dem": "60", "votes_gop": "40"} for fips in ("", "NA", "6037")]
+    assert list(bhb.president_baseline_wide(rows)) == ["06037"]
+
+
+def test_county_weighted_ignores_zz_water_pseudo_districts():
+    real = sorted(g for g in races.HOUSE_DISTRICTS if g.startswith("17"))[:2]
+    zz = "17ZZ"
+    rows = [
+        {"GEOID_CD119_20": real[0], "GEOID_COUNTY_20": "17001"},
+        {"GEOID_CD119_20": real[1], "GEOID_COUNTY_20": "17003"},
+        # A county split only with water counts as whole.
+        {"GEOID_CD119_20": real[1], "GEOID_COUNTY_20": "17031"},
+        {"GEOID_CD119_20": zz, "GEOID_COUNTY_20": "17031"},
+    ]
+    county_votes = {"17001": 100, "17003": 100, "17031": 1000}
+    baseline = bhb.house_baseline_county_weighted(rows, county_votes, 2024)
+    assert baseline == {real[0]: {"votes": 100, "year": 2024}, real[1]: {"votes": 1100, "year": 2024}}
