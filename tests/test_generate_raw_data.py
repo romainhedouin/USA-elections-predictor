@@ -20,21 +20,23 @@ network) so this only exercises the CSV-writing logic.
 
 import csv
 import importlib.util
-import sys
 from pathlib import Path
+
+import pytest
+
+from races import CSV_HEADER
+
+# legacy/generate_raw_data.py imports bs4 at module level.
+pytest.importorskip("bs4")
 
 REPO = Path(__file__).resolve().parent.parent
 LEGACY = REPO / "legacy"
-
-sys.path.insert(0, str(REPO))
-from races import CSV_HEADER  # noqa: E402
 
 
 def _load_generate_raw_data():
     """Import legacy/generate_raw_data.py as a module.
 
-    It does `from races import ...`, so races.py must already be importable
-    (done above) before this runs.
+    It does `from races import ...`; conftest.py puts the repo root on sys.path.
     """
     spec = importlib.util.spec_from_file_location("generate_raw_data", LEGACY / "generate_raw_data.py")
     module = importlib.util.module_from_spec(spec)

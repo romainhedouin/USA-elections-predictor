@@ -19,10 +19,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO))
 
 # Viewports the project claims to support. Landscape phone is deliberately
 # included: it is the one where a US map plus chrome cannot all fit, so it is
@@ -85,7 +84,10 @@ def base_url(site):
     server.shutdown()
 
 
-def make_driver(width, height, mobile, theme="light", palette=None):
+def make_driver(width, height, mobile, theme="light"):
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument(f"--window-size={width},{height}")
@@ -109,7 +111,7 @@ def page(base_url):
 
     def open_page(viewport, theme="light", palette=None):
         width, height, mobile = VIEWPORTS[viewport]
-        driver = make_driver(width, height, mobile, theme, palette)
+        driver = make_driver(width, height, mobile, theme)
         drivers.append(driver)
         # Seed the stored preferences before the page's head script reads them.
         driver.get(f"{base_url}/map.html")

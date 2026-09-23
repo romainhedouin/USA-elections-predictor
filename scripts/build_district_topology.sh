@@ -36,7 +36,7 @@ SHAPE_URL="https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_cd119_20m.z
 SHAPE_BASE="cb_2024_us_cd119_20m"
 
 echo "Fetching $SHAPE_URL"
-curl -sL -o "$WORK/$SHAPE_BASE.zip" "$SHAPE_URL"
+curl -fsSL -o "$WORK/$SHAPE_BASE.zip" "$SHAPE_URL"
 unzip -q -o "$WORK/$SHAPE_BASE.zip" -d "$WORK"
 
 echo "Installing the topojson/d3 build toolchain (once)"

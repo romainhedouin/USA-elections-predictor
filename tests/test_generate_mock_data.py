@@ -13,10 +13,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+from races import CSV_HEADER, RACES, race_files
 
-sys.path.insert(0, str(REPO))
-from races import CSV_HEADER, RACES, race_files  # noqa: E402
+REPO = Path(__file__).resolve().parent.parent
 
 
 def run_generate(tmp_path, race="president"):

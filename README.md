@@ -66,11 +66,13 @@ shows a "Demo data" badge when serving it.
 ## Map
 
 ```
-python3 -m http.server
+DATA_DIR=. REFRESH_ENABLED=0 python server.py
 ```
 
-Then open `http://localhost:8000/map.html` (opening the file directly won't
-work — `fetch` needs HTTP). It shows a national map with President / Senate /
+Then open `http://localhost:8000/` (serves the CSVs written above, with no
+background fetching; opening the file directly won't work — `fetch` needs
+HTTP). `python3 -m http.server` also works, except that clicking a House
+district can't load its county breakdown. It shows a national map with President / Senate /
 Governor / House tabs; click a state (or House district) to drill into
 counties. Solid fill means a region's count is effectively done, hatching
 means it's still counting, grey means no data yet, and a dashed outline marks
@@ -90,7 +92,7 @@ a state/district where the raw leader disagrees with the projected winner.
 | `static/` | checked-in reference data: county FIPS table, district topology, historical baselines |
 | `scripts/` | one-time/rare build scripts that regenerate `static/`'s contents |
 | `legacy/` | the superseded Selenium scraper, kept as a fallback |
-| `tests/` | layout regressions (Selenium) + baseline math unit tests |
+| `tests/` | layout regressions (Selenium) + unit tests (Python and Node) |
 | `DEPLOY.md` | Railway setup |
 
 ## Deploying
@@ -110,8 +112,11 @@ DATA_DIR=./data REFRESH_SECONDS=900 NBC_CYCLE=2024 RACES=president python server
 | `DEFAULT_RACE` | `president` | which race a visitor lands on |
 | `REFRESH_SECONDS` | `900` | 60 on election night; floor is 30 |
 | `REFRESH_ENABLED` | `1` | `0` pauses fetching; the site stays up serving what it has |
-| `DATA_YEAR` | race config | override the cycle to pull |
+| `DATA_YEAR` (alias `NBC_CYCLE`) | race config | override the cycle to pull |
 | `FETCH_TIMEOUT` | `300` | hard kill per race |
+| `SEED_ON_BOOT` | `1` | `0` skips the cold-start mock seed for missing CSVs |
+| `DISTRICT_CACHE_SECONDS` | `60` | how long a `/house-district/<geoid>` response is cached; floor is 15 |
+| `PORT` | `8000` | listen port (Railway injects it) |
 
 `/healthz` reports per-race freshness and errors. See `DEPLOY.md` for the
 Railway-specific steps.
