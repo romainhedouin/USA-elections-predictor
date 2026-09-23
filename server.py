@@ -52,6 +52,8 @@ ENVIRONMENT
                      - see /house-district/<geoid> below.
 """
 
+import filecmp
+import gzip
 import json
 import logging
 import os
@@ -69,7 +71,7 @@ import nbc_api
 # Aliased: this module already uses RACES for its own "which races are
 # actively refreshed" tuple (see ALL_RACES/_parse_races below) - importing
 # races.py's config dict under the same name would silently shadow it.
-from races import RACES as RACE_CONFIG
+from races import HOUSE_DISTRICTS, RACES as RACE_CONFIG, race_files
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -136,12 +138,11 @@ DEFAULT_RACE = _parse_default_race(os.environ.get("DEFAULT_RACE"))
 
 
 def csv_name(race):
-    """President keeps the unsuffixed name, matching the repo's race_files()."""
-    return "raw_data.csv" if race == "president" else f"raw_data_{race}.csv"
+    return race_files(race)["output_csv"].name
 
 
 def meta_name(race):
-    return csv_name(race).replace(".csv", ".meta.json")
+    return race_files(race)["output_csv"].with_suffix(".meta.json").name
 
 
 CSV_NAMES = {csv_name(r) for r in ALL_RACES}  # every race is servable; only RACES gets refreshed
@@ -320,7 +321,11 @@ def refresh_race(race, *, use_mock=False):
         # os.replace is atomic within a filesystem, and .staging lives inside
         # DATA_DIR precisely so it is the same filesystem as the volume.
         # A reader either sees the whole old file or the whole new one.
-        os.replace(staged, target)
+        # Identical bytes are dropped so the served file's mtime/ETag stays put.
+        if target.exists() and filecmp.cmp(staged, target, shallow=False):
+            staged.unlink()
+        else:
+            os.replace(staged, target)
 
         # The .meta.json sidecar rides along with its CSV. Promote it second
         # and only on success: a stale sidecar next to fresh numbers would have
@@ -417,9 +422,28 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 # subdirectory this server ever serves out of, so no general traversal logic.
 SAFE_STATIC_PATH = re.compile(r"^static/[A-Za-z0-9._-]+$")
 
-# path -> (mtime_ns, bytes). Bounded by construction: only CSV/meta/static
-# paths the router already whitelists ever get read, so at most a handful of
-# entries (a few races' worth of CSV + meta, well under 1MB total).
+
+class _Body:
+    """Response bytes plus a lazily-built gzip copy, cached alongside them."""
+    __slots__ = ("key", "raw", "_gz")
+
+    def __init__(self, key, raw):
+        self.key, self.raw, self._gz = key, raw, None
+
+    def gz(self):
+        if self._gz is None:
+            self._gz = gzip.compress(self.raw, 6)
+        return self._gz
+
+
+def _compressible(content_type):
+    return content_type.startswith(("text/", "application/json",
+                                    "application/javascript", "image/svg+xml"))
+
+
+# path -> _Body keyed on (mtime_ns, size). Bounded by construction: only
+# CSV/meta/static paths the router already whitelists ever get read, so at
+# most a handful of entries.
 _FILE_CACHE = {}
 
 DISTRICT_ROUTE = re.compile(r"^/house-district/([0-9]{4})$")
@@ -427,9 +451,7 @@ DISTRICT_ROUTE = re.compile(r"^/house-district/([0-9]{4})$")
 # districts: DISTRICT_ROUTE alone would match any of the 10,000 "NNNN" paths,
 # so _house_district_payload checks every geoid against this allowlist and
 # 404s the rest before they ever reach nbc_api or the cache below.
-_KNOWN_DISTRICT_GEOIDS = frozenset(
-    json.loads((STATIC_DATA_DIR / "house_districts.json").read_text(encoding="utf-8")).keys()
-)
+_KNOWN_DISTRICT_GEOIDS = frozenset(HOUSE_DISTRICTS)
 _district_cache = {}
 _district_cache_lock = threading.Lock()
 # geoid -> Event, set only while a fetch for that geoid is in flight. Lets a
@@ -518,7 +540,7 @@ def _house_district_payload(geoid):
                 status, body = 200, json.dumps(payload).encode("utf-8")
 
         with _district_cache_lock:
-            _district_cache[geoid] = (now, status, body)
+            _district_cache[geoid] = (time.monotonic(), status, body)
         return status, body
     finally:
         # Release the in-flight claim (however we got here - success,
@@ -589,7 +611,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "electionmap"
     sys_version = ""
     protocol_version = "HTTP/1.1"
-    _index_html = None  # lazily-built, cached copy of map.html + injected config
+    _index_html = None  # lazily-built _Body of map.html + injected config
 
     # -- helpers ---------------------------------------------------------
     def _send(self, code, body, content_type, extra_headers=None, head_only=False):
@@ -624,21 +646,51 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(500, "500 internal error\n", "text/plain; charset=utf-8",
                               head_only=head_only)
 
+        key = (st.st_mtime_ns, st.st_size)
+        etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+        last_mod = self.date_time_string(int(st.st_mtime))
+        headers = {"Last-Modified": last_mod}
+        headers.update(extra_headers or {})
+        use_gz = self._use_gzip(content_type, headers)
+        headers["ETag"] = etag[:-1] + '-gz"' if use_gz else etag
+
+        if self._is_fresh(etag, last_mod):
+            self.send_response(304)
+            for k, v in headers.items():
+                self.send_header(k, v)
+            self.end_headers()
+            return
+
         cached = _FILE_CACHE.get(path)
-        if cached is not None and cached[0] == st.st_mtime_ns:
-            body = cached[1]
-        else:
+        if cached is None or cached.key != key:
             try:
-                body = path.read_bytes()
+                cached = _Body(key, path.read_bytes())
             except OSError as exc:
                 log.error("read failed path=%s err=%s", path, exc)
                 return self._send(500, "500 internal error\n", "text/plain; charset=utf-8",
                                   head_only=head_only)
-            _FILE_CACHE[path] = (st.st_mtime_ns, body)
+            _FILE_CACHE[path] = cached
+        self._send_body(cached, use_gz, content_type, headers, head_only)
 
-        headers = {"Last-Modified": self.date_time_string(int(st.st_mtime))}
-        headers.update(extra_headers or {})
-        self._send(200, body, content_type, headers, head_only)
+    def _use_gzip(self, content_type, headers):
+        """Whether to send the gzip variant; also sets Vary on compressible types."""
+        if not _compressible(content_type):
+            return False
+        headers["Vary"] = "Accept-Encoding"
+        return "gzip" in self.headers.get("Accept-Encoding", "")
+
+    def _is_fresh(self, etag, last_mod):
+        """Conditional-GET check; If-None-Match matches either encoding's tag."""
+        inm = self.headers.get("If-None-Match")
+        if inm:
+            tags = {t.strip().removeprefix("W/").replace('-gz"', '"') for t in inm.split(",")}
+            return etag in tags or "*" in tags
+        return self.headers.get("If-Modified-Since") == last_mod
+
+    def _send_body(self, body, use_gz, content_type, headers, head_only):
+        if use_gz:
+            headers["Content-Encoding"] = "gzip"
+        self._send(200, body.gz() if use_gz else body.raw, content_type, headers, head_only)
 
     def _send_index(self, head_only=False):
         """map.html, with the runtime config substituted into its placeholder.
@@ -651,8 +703,8 @@ class Handler(BaseHTTPRequestHandler):
         a request serving the single busiest route on the site does not re-read
         a 69KB file from disk and re-run a string replace every single time.
         """
-        html = Handler._index_html
-        if html is None:
+        body = Handler._index_html
+        if body is None:
             try:
                 raw = (REPO_DIR / "map.html").read_text(encoding="utf-8")
             except OSError as exc:
@@ -661,9 +713,10 @@ class Handler(BaseHTTPRequestHandler):
                                   head_only=head_only)
             config = json.dumps({"defaultRace": DEFAULT_RACE})
             html = raw.replace("<!--CONFIG-->", f"<script>window.__config={config};</script>", 1)
-            Handler._index_html = html
-        self._send(200, html, "text/html; charset=utf-8",
-                   {"Cache-Control": "no-cache"}, head_only)
+            body = Handler._index_html = _Body(None, html.encode("utf-8"))
+        content_type = "text/html; charset=utf-8"
+        headers = {"Cache-Control": "no-cache"}
+        self._send_body(body, self._use_gzip(content_type, headers), content_type, headers, head_only)
 
     def _not_found(self, head_only=False):
         self._send(404, "404 not found\n", "text/plain; charset=utf-8", head_only=head_only)

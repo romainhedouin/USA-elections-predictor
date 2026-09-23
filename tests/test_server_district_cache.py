@@ -14,8 +14,11 @@ claim but don't enforce in code:
     district at once" guard the DISTRICT_CACHE_SECONDS docstring describes.
 """
 
+import gzip
+import http.client
 import threading
 import time
+from http.server import ThreadingHTTPServer
 
 import server
 
@@ -23,7 +26,7 @@ import server
 def _known_geoid():
     """Any real geoid from static/house_districts.json, for tests that need
     one that actually reaches nbc_api.district_results()."""
-    return next(iter(server.nbc_api._HOUSE_DISTRICTS))
+    return next(iter(server._KNOWN_DISTRICT_GEOIDS))
 
 
 def _fake_district_payload(geoid):
@@ -48,7 +51,7 @@ def test_geoid_outside_the_435_known_districts_is_not_cached(monkeypatch):
     435 "by construction"; that's only true if unknown geoids are rejected
     before they're written in."""
     bogus_geoid = "9999"
-    assert bogus_geoid not in server.nbc_api._HOUSE_DISTRICTS
+    assert bogus_geoid not in server._KNOWN_DISTRICT_GEOIDS
 
     monkeypatch.setattr(server.nbc_api, "district_results", lambda geoid, cycle: None)
     server._district_cache.clear()
@@ -107,3 +110,44 @@ def test_concurrent_requests_for_same_uncached_geoid_fetch_upstream_once(monkeyp
         assert all(r == (200, results[0][1]) for r in results)
     finally:
         server._district_cache.clear()
+
+
+def _get(port, path, **headers):
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        conn.request("GET", path, headers=headers)
+        resp = conn.getresponse()
+        return resp.status, dict(resp.getheaders()), resp.read()
+    finally:
+        conn.close()
+
+
+def test_send_file_conditional_get_and_gzip(tmp_path, monkeypatch):
+    """ETag/If-None-Match and If-Modified-Since yield a bodiless 304 for either
+    encoding's tag, and gzip is served when accepted."""
+    body = b"State;Area\n" + b"Testland;Somewhere\n" * 200
+    (tmp_path / "raw_data.csv").write_bytes(body)
+    monkeypatch.setattr(server, "DATA_DIR", tmp_path)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    try:
+        status, headers, plain = _get(port, "/raw_data.csv")
+        assert status == 200 and plain == body and "Content-Encoding" not in headers
+        etag, last_mod = headers["ETag"], headers["Last-Modified"]
+
+        status, gz_headers, gz_body = _get(port, "/raw_data.csv", **{"Accept-Encoding": "gzip"})
+        assert status == 200 and gz_headers["Content-Encoding"] == "gzip"
+        assert gzip.decompress(gz_body) == body and gz_headers["ETag"] != etag
+        assert gz_headers["Vary"] == "Accept-Encoding"
+
+        for cond in ({"If-None-Match": etag}, {"If-None-Match": gz_headers["ETag"]},
+                     {"If-Modified-Since": last_mod}):
+            status, h, rest = _get(port, "/raw_data.csv", **cond)
+            assert status == 304 and rest == b"" and "Content-Length" not in h
+
+        status, _h, _b = _get(port, "/raw_data.csv", **{"If-None-Match": '"stale"'})
+        assert status == 200
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
