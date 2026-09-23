@@ -53,6 +53,31 @@ function historicalShare(historicalEntry) {
   return { demShare, repShare, year };
 }
 
+// Vote-weighted Dem share of a state, from its counties' reference entries
+// ([fips, entry] pairs, e.g. historical_president.json). Null if none.
+function stateShareFromCounties(countyEntries) {
+  let dem = 0, total = 0;
+  for (const [, entry] of countyEntries) {
+    if (!historicalShare(entry) || !(entry.votes > 0)) continue;
+    dem += entry.demShare * entry.votes;
+    total += entry.votes;
+  }
+  return total > 0 ? dem / total : null;
+}
+
+// A county baseline for a race that only has a statewide result (Senate):
+// the county's own lean in a reference race (President), shifted by how much
+// the statewide result ran ahead of or behind that reference race. Without
+// this, every county would be compared against the state average, so a
+// normally deep-blue or deep-red county would read as a huge "swing".
+function shiftedCountyBaseline(countyReference, stateEntry, stateReferenceShare) {
+  const county = historicalShare(countyReference);
+  const state = historicalShare(stateEntry);
+  if (!county || !state || stateReferenceShare == null) return null;
+  const demShare = clamp(county.demShare + (state.demShare - stateReferenceShare), 0, 1);
+  return { demShare, repShare: 1 - demShare, year: state.year };
+}
+
 // Deviation of the counted-so-far Dem share from the historical Dem share,
 // in the same [-1, 1] units as demShare itself. Null if nothing is counted
 // yet (nothing to compare) or there's no historical share to compare against.
@@ -173,6 +198,8 @@ const api = {
   projectedRemainingShare,
   flatPredict,
   estimateArea,
+  stateShareFromCounties,
+  shiftedCountyBaseline,
 };
 
 if (typeof module !== "undefined" && module.exports) {

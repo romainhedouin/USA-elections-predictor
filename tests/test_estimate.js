@@ -12,6 +12,8 @@ const {
   expectedTotalVotes,
   flatPredict,
   estimateArea,
+  stateShareFromCounties,
+  shiftedCountyBaseline,
 } = require("../estimate.js");
 
 test("confidenceWeight is 0 with nothing counted", () => {
@@ -157,4 +159,36 @@ test("swing contradicting history: 50% in, sustained, flips the projected leader
   assert.ok(result.demPredicted < result.repPredicted);
   const total = result.demPredicted + result.repPredicted;
   assert.ok(Math.abs(result.demPredicted / total - 0.38) < 0.001);
+});
+
+test("stateShareFromCounties is the vote-weighted Dem share, skipping unusable entries", () => {
+  const share = stateShareFromCounties([
+    ["1", { demShare: 0.8, repShare: 0.2, votes: 300 }],
+    ["2", { demShare: 0.2, repShare: 0.8, votes: 100 }],
+    ["3", { votes: 1000 }], // votes-only entry: no share to weigh
+  ]);
+  assert.ok(Math.abs(share - 0.65) < 1e-9);
+  assert.equal(stateShareFromCounties([]), null);
+});
+
+test("shiftedCountyBaseline keeps the county's own lean, moved by the state's gap to the reference race", () => {
+  // State Senate ran 2pt more D than the state's presidential result.
+  const b = shiftedCountyBaseline({ demShare: 0.73, repShare: 0.27 }, { demShare: 0.51, repShare: 0.49, year: 2020 }, 0.49);
+  assert.ok(Math.abs(b.demShare - 0.75) < 1e-9);
+  assert.ok(Math.abs(b.repShare - 0.25) < 1e-9);
+  assert.equal(b.year, 2020);
+  assert.equal(shiftedCountyBaseline({ demShare: 0.99, repShare: 0.01 }, { demShare: 0.6, repShare: 0.4 }, 0.4).demShare, 1);
+  assert.equal(shiftedCountyBaseline(undefined, { demShare: 0.5, repShare: 0.5 }, 0.5), null);
+  assert.equal(shiftedCountyBaseline({ demShare: 0.5, repShare: 0.5 }, { votes: 100 }, 0.5), null); // votes-only state
+});
+
+test("a deep-blue county counting at its usual level is not dragged to the state mean", () => {
+  // Fulton-like: normally ~73% D, 20% counted at 73% D, in a ~49% D state.
+  const area = { demReal: 73, repReal: 27, totalVotes: 100, percentIn: 20 };
+  const stateBaseline = { demShare: 0.491, repShare: 0.509 };
+  const countyBaseline = shiftedCountyBaseline({ demShare: 0.727, repShare: 0.273 }, stateBaseline, 0.489);
+  const dragged = estimateArea(area, stateBaseline, 1);
+  const own = estimateArea(area, countyBaseline, 1);
+  assert.ok(dragged.remainingShare.demShare < 0.6); // the old bug: ~58.7% D for the rest
+  assert.ok(Math.abs(own.remainingShare.demShare - 0.73) < 0.01);
 });

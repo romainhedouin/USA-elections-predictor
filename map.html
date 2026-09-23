@@ -717,6 +717,7 @@ const normalize = name => name.trim().toLowerCase();
 
 // Hooks for the test suite in tests/. Nothing in the page reads these.
 window.__mapTest = {};
+const numberFmt = n => Math.round(n).toLocaleString();
 const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
 // Tri-state on purpose: an exact tie is not a Republican lead, and calling it
@@ -871,12 +872,28 @@ function stateHistoricalCoverage(areas, historical, race, historicalKeyOf) {
   };
 }
 
+// Per-county baselines for one state of a state-keyed race: each county's
+// President lean shifted to the state's own result. Areas without a county
+// FIPS (township/ward states) get null and keep the statewide baseline.
+function countyBaselineFactory(areas, historical, historicalKeyOf, countyReference) {
+  const prefix = areas.map(a => a.fips).find(Boolean)?.slice(0, 2);
+  if (!countyReference || !prefix) return () => null;
+  const stateEntry = historical[historicalKeyOf(areas[0])];
+  const stateReferenceShare = estimate.stateShareFromCounties(historicalByPrefix(countyReference).get(prefix) || []);
+  return area => (area.fips
+    ? estimate.shiftedCountyBaseline(countyReference[area.fips], stateEntry, stateReferenceShare)
+    : null);
+}
+
 // historical is this race's parsed historical_<race>.json (or {} if it
 // hasn't loaded yet / doesn't exist) - see loadHistoricalBaseline(). Areas
 // missing from it (no seat-year match, non-county geography, a
 // redistricting-affected district - see races.py) simply aren't in the
 // object, which is exactly the signal estimate.js's fallback path checks for.
-function buildRaceData(rows, race, historical) {
+// countyReference: for state-keyed races (Senate/Governor), the President
+// baseline, used to give each county its own baseline - see
+// estimate.shiftedCountyBaseline. Null for the other races.
+function buildRaceData(rows, race, historical, countyReference) {
   const dataByKey = new Map();
   const stateAggregates = new Map();
   // Every reporting area of a state, in order, whether or not it can be drawn.
@@ -897,6 +914,7 @@ function buildRaceData(rows, race, historical) {
   // Senate/Governor historical baselines are state-level only (MEDSL doesn't
   // publish county-level returns for those offices) - looked up by state
   // name, not FIPS, unlike President/House. See build_historical_baseline.py.
+  // Counties then get their own derived baseline via countyBaselineFactory.
   const historicalKeyOf = area => (RACE_META[race].historicalKey === "state" ? area.stateName : area.fips);
 
   for (const row of rows) {
@@ -914,6 +932,9 @@ function buildRaceData(rows, race, historical) {
       repName: row["Republican Name"] || "Republican",
       stateName: row["State"],
       fips: row["FIPS"] || null,
+      // One side with no candidate (e.g. an independent instead of a
+      // Democrat): any baseline would invent votes for a missing candidate.
+      contested: Boolean(row["Democrat Name"] && row["Republican Name"]),
     };
     // Keyed by county FIPS, which is exactly the id us-atlas gives its county
     // shapes. Matching on names instead used to paint 10 states wrong - a New
@@ -936,8 +957,10 @@ function buildRaceData(rows, race, historical) {
   for (const [stateKey, areas] of areasByState) {
     const { reportingVoteFraction, silentDemPredicted, silentRepPredicted, ballotEstimateOverride } =
       stateHistoricalCoverage(areas, historical, race, historicalKeyOf);
+    const countyBaselineOf = countyBaselineFactory(areas, historical, historicalKeyOf, countyReference);
     for (const area of areas) {
-      const historicalEntry = historical[historicalKeyOf(area)];
+      const historicalEntry = area.contested
+        ? countyBaselineOf(area) || historical[historicalKeyOf(area)] : null;
       Object.assign(area, estimate.estimateArea(area, historicalEntry, reportingVoteFraction));
     }
 
@@ -1119,11 +1142,14 @@ function loadRace(race, prev) {
     fetchText(RACE_META[race].csv),
     fetch(metaUrl(race)).then(r => (r.ok ? r.json() : null)).catch(() => null),
     loadHistoricalBaseline(race),
+    RACE_META[race].historicalKey === "state" ? loadHistoricalBaseline("president") : null,
     isDistrictRace(race) ? loadDistricts() : null,
-  ]).then(([csvText, meta, historical]) =>
+  ]).then(([csvText, meta, historical, countyReference]) =>
     (prev && prev.race === race && prev.csvText === csvText && prev.historical === historical
+      && prev.countyReference === countyReference
       ? { ...prev, meta, unchanged: true }
-      : { race, meta, historical, csvText, ...buildRaceData(parseRaceCsv(csvText), race, historical) }));
+      : { race, meta, historical, countyReference, csvText,
+          ...buildRaceData(parseRaceCsv(csvText), race, historical, countyReference) }));
 }
 
 function start(topology, defaultRaceData) {
@@ -1339,7 +1365,10 @@ function start(topology, defaultRaceData) {
     const swingDir = data.swing >= 0 ? `+${swingPts}pt D` : `${swingPts}pt D`;
     const confidencePct = (data.weight * 100).toFixed(0);
     const remainShare = data.remainingShare;
-    return `Historical baseline (${h.year}): D ${(h.demShare * 100).toFixed(0)}% / R ${(h.repShare * 100).toFixed(0)}%<br>`
+    // Senate/Governor have one statewide result; the county figure is derived.
+    const label = RACE_META[current.race].historicalKey === "state"
+      ? `County baseline (est. from ${h.year} statewide)` : `Historical baseline (${h.year})`;
+    return `${label}: D ${(h.demShare * 100).toFixed(0)}% / R ${(h.repShare * 100).toFixed(0)}%<br>`
       + `Observed swing so far: ${swingDir} (confidence ${confidencePct}%)<br>`
       + `Remaining-vote projection: D ${(remainShare.demShare * 100).toFixed(0)}% / R ${(remainShare.repShare * 100).toFixed(0)}%`;
   }
@@ -1437,14 +1466,14 @@ function start(topology, defaultRaceData) {
           // percentIn, or the flat fallback) - both project the same two-party
           // total, only the D/R split differs. See estimate.js's expectedTotalVotes.
           const totalBallots = data.demPredicted + data.repPredicted;
-          html += `${+data.percentIn.toFixed(1)}% in, ${totalBallots.toLocaleString()} total ballots<br>`
-            + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R<br>`;
+          html += `${+data.percentIn.toFixed(1)}% in, ${numberFmt(totalBallots)} total ballots<br>`
+            + `Real: ${numberFmt(data.demReal)} D / ${numberFmt(data.repReal)} R<br>`;
           if (data.usedFallback) {
             html += `No historical baseline for this area &mdash; using live-only estimate<br>`;
           } else if (data.historical) {
             html += describeEstimateBreakdown(data) + "<br>";
           }
-          html += `Predicted total: ${data.demPredicted.toLocaleString()} D / ${data.repPredicted.toLocaleString()} R`;
+          html += `Predicted total: ${numberFmt(data.demPredicted)} D / ${numberFmt(data.repPredicted)} R`;
         }
         showTooltip(event, html);
       })
@@ -1643,7 +1672,6 @@ function start(topology, defaultRaceData) {
   let districtFetchToken = 0; // guards a slow fetch landing after the panel moved on
   let errorTimer;
 
-  const numberFmt = n => Math.round(n).toLocaleString();
   const pct = (part, whole) => (whole > 0 ? (part / whole) * 100 : 0);
 
   // Two numbers for every candidate: what is actually counted, and where that
@@ -1831,10 +1859,10 @@ function start(topology, defaultRaceData) {
           html += "No data yet";
         } else {
           const totalBallots = data.demPredicted + data.repPredicted;
-          html += `${+data.percentIn.toFixed(1)}% in, ${totalBallots.toLocaleString()} total ballots<br>`
-            + `Real: ${data.demReal.toLocaleString()} D / ${data.repReal.toLocaleString()} R<br>`
+          html += `${+data.percentIn.toFixed(1)}% in, ${numberFmt(totalBallots)} total ballots<br>`
+            + `Real: ${numberFmt(data.demReal)} D / ${numberFmt(data.repReal)} R<br>`
             + `No county-level historical baseline for House &mdash; using live-only estimate<br>`
-            + `Predicted: ${data.demPredicted.toLocaleString()} D / ${data.repPredicted.toLocaleString()} R`;
+            + `Predicted: ${numberFmt(data.demPredicted)} D / ${numberFmt(data.repPredicted)} R`;
         }
         showTooltip(event, html);
       })
