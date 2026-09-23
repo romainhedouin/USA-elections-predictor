@@ -663,7 +663,7 @@ const RACE_META = {
     // field rather than the race id, so a second district race would only
     // need to set it too. All 435 seats are always in play, so unlike the
     // other three races' hand-typed weights, this one is filled in from the
-    // district topology once it loads (see start()) rather than duplicated
+    // district topology once it loads (see loadDistricts()) rather than duplicated
     // here - 435 GEOIDs is too much to hand-maintain twice.
     //
     // A district's own drill-down (openDistrictOverlay) fetches its county
@@ -1077,6 +1077,22 @@ function loadHistoricalBaseline(race) {
   return promise;
 }
 
+// House-only, so fetched on first use rather than on every page load. Every
+// district is always in play and there are 435 of them - too many to
+// hand-type like the other races' weights - so they're filled in from the
+// topology itself here.
+let districtFeatures = null;
+let districtsPromise = null;
+function loadDistricts() {
+  return districtsPromise ??= fetch(DISTRICT_TOPOLOGY_URL)
+    .then(r => { if (!r.ok) throw new Error(`${r.status} fetching district boundaries`); return r.json(); })
+    .then(t => {
+      districtFeatures = topojson.feature(t, t.objects.districts).features;
+      RACE_META.house.weights = Object.fromEntries(districtFeatures.map(d => [d.id, 1]));
+    })
+    .catch(err => { districtsPromise = null; throw err; });
+}
+
 if (typeof d3 === "undefined" || typeof topojson === "undefined") {
   document.getElementById("loading").style.display = "none";
   const box = document.getElementById("error");
@@ -1086,10 +1102,9 @@ if (typeof d3 === "undefined" || typeof topojson === "undefined") {
 } else {
   Promise.all([
     fetch(TOPOLOGY_URL).then(r => { if (!r.ok) throw new Error(`${r.status} fetching county boundaries`); return r.json(); }),
-    fetch(DISTRICT_TOPOLOGY_URL).then(r => { if (!r.ok) throw new Error(`${r.status} fetching district boundaries`); return r.json(); }),
     loadRace(DEFAULT_RACE),
   ])
-    .then(([topology, districtTopology, defaultRaceData]) => start(topology, districtTopology, defaultRaceData))
+    .then(([topology, defaultRaceData]) => start(topology, defaultRaceData))
     .catch(err => {
       console.error(err);
       showFatal(`Could not load map data (${err.message}). Serve this folder over HTTP and make sure the raw_data*.csv files sit next to map.html - run "python generate_mock_data.py --race president" to create them.`);
@@ -1104,13 +1119,14 @@ function loadRace(race, prev) {
     fetchText(RACE_META[race].csv),
     fetch(metaUrl(race)).then(r => (r.ok ? r.json() : null)).catch(() => null),
     loadHistoricalBaseline(race),
+    isDistrictRace(race) ? loadDistricts() : null,
   ]).then(([csvText, meta, historical]) =>
     (prev && prev.race === race && prev.csvText === csvText && prev.historical === historical
       ? { ...prev, meta, unchanged: true }
       : { race, meta, historical, csvText, ...buildRaceData(parseRaceCsv(csvText), race, historical) }));
 }
 
-function start(topology, districtTopology, defaultRaceData) {
+function start(topology, defaultRaceData) {
   // `current` holds whichever race's parsed data is active - swapped out by
   // switchRace() below; everything else (topology, DOM) is built once.
   let current = defaultRaceData;
@@ -1143,14 +1159,9 @@ function start(topology, districtTopology, defaultRaceData) {
   // only carries "Congressional District N" plus the state's own FIPS (see
   // build_district_topology.sh) - so build the map-unit key, aggregate-data
   // key and display label for the current race's national units in one
-  // place, rather than re-deriving them at every call site.
-  const allDistricts = topojson.feature(districtTopology, districtTopology.objects.districts).features;
-  // Every district is always in play, and there are 435 of them - too many to
-  // hand-type like the other races' weights, so fill this in from the
-  // topology itself once, rather than shipping a second copy of the same list.
-  RACE_META.house.weights = Object.fromEntries(allDistricts.map(d => [d.id, 1]));
-
-  const nationalFeatures = () => (isDistrictRace(current.race) ? allDistricts : allStates);
+  // place, rather than re-deriving them at every call site. districtFeatures
+  // is always loaded by then: loadRace awaits it for any district race.
+  const nationalFeatures = () => (isDistrictRace(current.race) ? districtFeatures : allStates);
   // The key that RACE_META[race].weights and stateAggregates/areasByState are
   // both keyed by for the current race: a state's own name for the three
   // statewide races (weights) or its lower-cased form (aggregates, built by
