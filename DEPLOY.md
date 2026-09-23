@@ -20,32 +20,26 @@ marked **[UNCONFIRMED]**.
 
 ## 1. Prepare the repo (before touching Railway)
 
-Commit these to the root of `romainhedouin/USA-elections-predictor`:
+Everything the deployment needs is already at the root of
+`romainhedouin/USA-elections-predictor`:
 
 ```
-server.py          # from this scratch dir
-railway.toml       # from this scratch dir
-requirements.txt   # already split; see 1a
-map.html           # already there
-fetch_results.py   # already there (or in progress)
-generate_mock_data.py, races.py   # already there
+server.py, railway.toml, requirements.txt, .python-version
+map.html, estimate.js, static/
+fetch_results.py, nbc_api.py, races.py, generate_mock_data.py
 ```
 
-### 1a. requirements.txt split — already done
+### 1a. requirements.txt — runtime only
 
 Railpack pip-installs the **root** `requirements.txt`, so that file is what the
-deployment gets. The root file already carries only what `server.py` and
-`fetch_results.py` need:
+deployment gets. It carries only what `server.py` and `fetch_results.py` need:
 
 ```
 requests==2.32.3
 ```
 
-`selenium` and `beautifulsoup4` live in `legacy/requirements.txt` instead
-(`pip install -r legacy/requirements.txt` if you need to run the superseded
-scraper), because a Railpack container has no Chrome binary and a Selenium
-install there could never run. This split landed in commit `b083b02`; nothing
-further to do here.
+Selenium (for the browser tests) lives in `tests/requirements.txt`, because a
+Railpack container has no Chrome binary and could never run it.
 
 ### 1b. Python version — already pinned
 
@@ -131,8 +125,8 @@ railway link                  # pick the workspace/project/service interactively
 
    Absolute, and deliberately *not* inside the app directory — a volume mounted
    over your source would hide it.
-5. Size: the Hobby default is **5GB** (Pro 50GB, self-serve up to 1TB). Three
-   CSVs are ~12KB total, so the default is already absurdly generous — accept it
+5. Size: the Hobby default is **5GB** (Pro 50GB, self-serve up to 1TB). The four
+   CSVs are under 1MB total on full 2024 data, so the default is already absurdly generous — accept it
    and do not raise it. **[UNCONFIRMED]** whether the $0.15/GB/month is charged
    on provisioned or on used bytes; the pricing page says only "You are only
    charged for the resources you actually use", which implies used. Either way
@@ -175,6 +169,10 @@ to paste all of them at once).
 | `NBC_CYCLE` | `2024` | `races.py` says 2026/2028 NBC paths 404 until results exist. Bump on election night. |
 | `RACES` | `president,senate,governor` | Or omit — the default is all four (add `house` here too if you want it refreshed). |
 | `FETCH_TIMEOUT` | `300` | Hard kill per race. ~10s expected, so 300 is very generous. |
+| `DEFAULT_RACE` | e.g. `senate` | Which tab a visitor lands on. |
+| `REFRESH_ENABLED` | `1` | `0` pauses the scheduler entirely (no NBC traffic) while still serving what's on the volume — use it out of season. |
+
+The full list, with defaults, is in the README's Deploying section.
 
 **Do not set `PORT`.** Railway injects it, and `server.py` reads it. The
 healthcheck also uses `PORT` to know where to probe.
@@ -279,10 +277,13 @@ BASE=https://<your-domain>
 # 1. page loads
 curl -sI $BASE/ | head -3                       # 200, text/html
 
-# 2. CSV loads with the right type and no caching
-curl -sI $BASE/raw_data.csv | grep -i 'content-type\|cache-control'
+# 2. CSV loads with the right type, gzip, and revalidation instead of caching
+curl -sI -H 'Accept-Encoding: gzip' $BASE/raw_data.csv | grep -i 'content-type\|cache-control\|content-encoding\|etag'
 # expect: Content-Type: text/csv; charset=utf-8
 #         Cache-Control: no-cache
+#         Content-Encoding: gzip
+#         ETag: "<hex>-<hex>-gz"
+# and replaying that ETag in If-None-Match returns 304 with no body.
 
 # 3. health
 curl -s $BASE/healthz | python3 -m json.tool
@@ -308,12 +309,18 @@ INFO  cycle done ok=3/3 duration=31.8s next_in=900s
 and on the first-ever boot with an empty volume:
 
 ```
-INFO  boot seed starting for president, senate, governor (no CSVs found in /data)
+INFO  boot seed starting for president, senate, governor, house (no CSVs found in /data)
 INFO  refresh race=president status=ok rows=70 bytes=4757 duration=0.1s source=mock
 ```
 
 A failed refresh logs `status=failed ... kept=True`, meaning the previous CSV is
 still being served. That is the designed behaviour, not an outage.
+
+If only some states fail (after one automatic retry for connect errors and
+5xx/429), the refresh logs `status=partial`: the good states are published, and
+the failed ones keep their rows from the previous live CSV. `/healthz` then
+reports `degraded` with `last_error: "partial: Failed: <state> (...)"` until a
+clean cycle clears it.
 
 **Volume persistence check:** hit `/healthz`, note `csv_bytes`, redeploy, hit it
 again. Same bytes and a `boot seed skipped` log line = the volume is working.
@@ -369,20 +376,42 @@ Hobby is **$5/month, which includes $5 of usage credit** — you pay
 | --- | --- |
 | RAM, 128MB always on | 0.125 GB × $10 = **$1.25/mo** |
 | vCPU — idle except ~30s of I/O-bound work every 15 min | ~0.01–0.03 vCPU avg ≈ **$0.20–$0.60/mo** |
-| Volume | **$0.00–$0.75/mo** — $0.15 × 1GB if billed on provisioned size, effectively $0 if billed on the ~12KB actually used, $0.75 worst case at the 5GB Hobby default |
-| Egress — 44KB page + ~12KB CSVs ≈ 56KB/visit (d3 and the county topology come from jsDelivr, not Railway) | 10k visits ≈ 0.56GB ≈ **$0.03/mo** |
+| Volume | **$0.00–$0.75/mo** — $0.15 × 1GB if billed on provisioned size, effectively $0 if billed on the <1MB actually used, $0.75 worst case at the 5GB Hobby default |
+| Egress — see below | 10k visits ≈ 1–2GB ≈ **$0.05–$0.10/mo** out of season |
 | **Total usage** | **≈ $1.50–$2.70/mo** |
 | **What you actually pay** | **$5.00/mo** — usage sits well under the included credit |
 
 So the honest answer: **$5/month, and the app is free inside that.** You would
 need roughly 2× this footprint before the bill moves at all.
 
+### Egress, measured
+
+Gzipped sizes served from Railway (September 2026, full 2024 data; d3 and the
+county topology come from jsDelivr, not Railway):
+
+| What | Size |
+| --- | --- |
+| Page (`map.html` + `estimate.js`) | ~36KB |
+| President CSV + historical baseline | ~93KB + ~39KB |
+| Senate / Governor CSV + baseline | ~2KB each |
+| House CSV + baseline + district topology (House tab only) | ~3KB + ~3KB + ~64KB |
+| 60s poll, data unchanged (two 304s) | ~1KB |
+| 60s poll, data changed | the active race's CSV, up to ~93KB |
+
+So a first visit is ~40KB (Senate default) to ~170KB (every tab opened), and
+an idle open tab costs ~60KB/hour; hidden tabs don't poll at all. The one
+thing that scales is **election night with `REFRESH_SECONDS=60`**: the CSV
+changes every cycle, so each visible tab on President downloads up to ~93KB a
+minute, ~5.6MB/hour. 10k people watching for 3 hours is roughly 170GB ≈
+**$8.50** — noticeable against the $5 credit, which is why the hard limit
+below must be raised before that night.
+
 The variable worth watching is **RAM**, because it is billed continuously. 128MB
 is a reasonable target (CPython baseline plus a short-lived fetch subprocess),
 but confirm it on the service's **Metrics** tab after a day. At 512MB steady
 state you would be paying $5/mo in RAM alone and would start exceeding the
-credit. Election-night traffic mostly shows up as egress: even 100k pageviews is
-~5.6GB ≈ $0.28.
+credit. Election-night traffic shows up as egress: 100k pageviews alone is ~17GB ≈
+$0.85, but viewers who leave the page open dominate (see above).
 
 ### Usage limits (<https://docs.railway.com/reference/usage-limits>)
 
