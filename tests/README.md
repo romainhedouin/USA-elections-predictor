@@ -31,8 +31,9 @@ Each test is a regression for something that actually shipped broken:
 | `test_tooltip.py` | the tooltip leaving the viewport — it flipped away from the right edge but nothing clamped it, so on a narrow screen it overflowed the left instead. Includes an exhaustive unit test of the placement maths, which reaches corners the UI never produces. |
 | `test_layout.py` | horizontal overflow, the map cropped or distorted, sub-44px tap targets, a page that scrolls despite being sized to fit, and a clean render in all four theme/palette combinations. |
 | `test_overlay.py` | a drill-down with no reachable backdrop (on a phone the sheet filled the screen, leaving the close button as the only exit), focus not returning on Escape, a modal that isn't announced as one, and the page scrolling behind an open sheet. |
-| `test_house.py` | House grouped by state instead of district, and the lazy district drill-down firing when it shouldn't or hanging when its fetch fails (against a stubbed `/house-district/<geoid>`). |
+| `test_house.py` | House grouped by state instead of district, and the lazy district drill-down firing when it shouldn't or hanging when its fetch fails (against a stubbed `/house-district/<geoid>`), and districts redrawn for 2026 showing 2024 results from their old lines. |
 | `test_map_helpers.py` | the geography label, summary tail and per-state county lookup that `map.html` shares across several call sites. |
+| `test_explain.py` | the **?** breakdown drifting from the number it explains (every row's and the total's working must end at the figures on screen), Escape/focus on the popup, and the extra column overflowing a phone. Uses the real baselines, since the shared site's are empty. |
 | `test_nbc_api.py` *(no browser)* | `nbc_api.py`'s payload normalisation for state and district results. |
 | `test_historical_baseline.py` *(no browser)* | `scripts/build_historical_baseline.py`'s join and aggregation logic. |
 | `test_generate_mock_data.py` *(no browser)* | the mock CSV's header, delimiter and row shape. |

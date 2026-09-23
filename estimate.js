@@ -98,9 +98,14 @@ function observedSwing(demReal, repReal, historical) {
 // see expectedTotalVotes) accounted for by areas currently reporting. The
 // caller computes this once per state, not per area - see map.html.
 function confidenceWeight(percentIn, reportingVoteFraction) {
+  return confidenceParts(percentIn, reportingVoteFraction).weight;
+}
+
+// The two factors of confidenceWeight, kept separate so the UI can show them.
+function confidenceParts(percentIn, reportingVoteFraction) {
   const voteComponent = clamp((percentIn / 100) / VOTE_TRUST_THRESHOLD, 0, 1);
   const areaComponent = clamp(reportingVoteFraction / AREA_VOTE_TRUST_THRESHOLD, 0, 1);
-  return voteComponent * areaComponent;
+  return { voteComponent, areaComponent, weight: voteComponent * areaComponent };
 }
 
 // An area's own best-guess eventual vote total: self-extrapolated from its
@@ -156,10 +161,11 @@ function flatPredict(demReal, repReal, percentIn) {
  *   accounted for by areas currently reporting - the caller computes this
  *   once per state (see map.html), estimateArea doesn't compute it itself.
  *
- * Returns null predictions (noData: true) at 0% counted; a flat-fallback
- * prediction (usedFallback: true) with no historical entry; otherwise the
- * full swing-blended prediction, with the intermediate historical/swing/
- * confidence values attached so the UI can show its work.
+ * Returns null predictions (noData: true) at 0% counted; the count itself
+ * at 100%; a flat-fallback prediction (usedFallback: true) with no
+ * historical entry; otherwise the full swing-blended prediction. Every
+ * intermediate value is returned too, so the UI can show the exact working
+ * rather than re-deriving it.
  */
 function estimateArea(area, historicalEntry, reportingVoteFraction) {
   const { demReal, repReal, percentIn, totalVotes } = area;
@@ -175,25 +181,31 @@ function estimateArea(area, historicalEntry, reportingVoteFraction) {
   const historical = historicalShare(historicalEntry);
   if (!historical) {
     const { demPredicted, repPredicted } = flatPredict(demReal, repReal, percentIn);
-    return { demPredicted, repPredicted, noData: false, usedFallback: true };
+    return { demPredicted, repPredicted, noData: false, usedFallback: true, scale: 100 / percentIn };
   }
 
+  const counted = demReal + repReal;
   const swing = observedSwing(demReal, repReal, historical);
-  const weight = confidenceWeight(percentIn, reportingVoteFraction);
+  const { voteComponent, areaComponent, weight } = confidenceParts(percentIn, reportingVoteFraction);
   const remainingShare = projectedRemainingShare(historical, swing, weight);
-  const remainingVotes = (demReal + repReal) * (100 - percentIn) / percentIn;
+  const remainingVotes = counted * (100 - percentIn) / percentIn;
   const { demPredicted, repPredicted } =
     predictFromRemainingShare(demReal, repReal, remainingVotes, remainingShare);
 
   return {
     demPredicted, repPredicted, noData: false, usedFallback: false,
     historical, swing, weight, remainingShare,
+    countedDemShare: counted > 0 ? demReal / counted : null,
+    voteComponent, areaComponent, reportingVoteFraction, remainingVotes,
   };
 }
 
 const api = {
+  VOTE_TRUST_THRESHOLD,
+  AREA_VOTE_TRUST_THRESHOLD,
   observedSwing,
   confidenceWeight,
+  confidenceParts,
   expectedTotalVotes,
   projectedRemainingShare,
   flatPredict,

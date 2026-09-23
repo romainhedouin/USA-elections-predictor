@@ -421,6 +421,52 @@
   .proj-inline { display: none; }
   #overlay-table caption { caption-side: top; text-align: left; font-size: 0.74rem; color: var(--muted); padding: 0 0 0.45rem; }
 
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  /* ---------- the "?" breakdown ---------- */
+  #overlay-table tr.explainable { cursor: pointer; }
+  #overlay-table tr.explainable:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+  #overlay-table td.why { width: 1%; padding-left: 0.2rem; }
+  button.why {
+    cursor: pointer; border: 1px solid var(--border); background: var(--chip); color: var(--muted);
+    width: 26px; height: 26px; border-radius: 50%; font: inherit; font-weight: 700; line-height: 1; padding: 0;
+  }
+  button.why:hover, button.why:focus-visible { background: var(--chip-hover); color: var(--ink); }
+  button.why-total {
+    cursor: pointer; justify-self: start; border: none; background: none; padding: 0.35rem 0; color: var(--muted);
+    font: inherit; font-size: 0.78rem; text-decoration: underline; text-underline-offset: 2px;
+  }
+  button.why-total:hover, button.why-total:focus-visible { color: var(--ink); }
+  #explain {
+    position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center;
+    background: rgba(15, 18, 24, 0.45);
+  }
+  #explain[hidden] { display: none; }
+  #explain-panel {
+    background: var(--card-bg); color: var(--ink); border: 1px solid var(--border); border-radius: 12px;
+    width: min(94vw, 560px); max-height: 85svh; overflow: auto; overscroll-behavior: contain;
+    padding: 1rem 1.25rem 1.25rem; box-shadow: 0 20px 50px rgba(16, 24, 40, 0.35);
+  }
+  #explain-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+  #explain-header h3 { font-size: 0.98rem; margin: 0; }
+  #explain-close {
+    cursor: pointer; border: none; background: var(--chip); color: var(--muted); width: 44px; height: 44px;
+    border-radius: 50%; font-size: 1.3rem; line-height: 1; flex: none;
+  }
+  #explain-close:hover { background: var(--chip-hover); color: var(--ink); }
+  ol.math { margin: 0; padding-left: 1.3rem; font-size: 0.85rem; line-height: 1.5; }
+  ol.math > li { margin-bottom: 0.55rem; }
+  ol.math > li > strong { display: block; }
+  ol.math ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+  ol.math code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; white-space: normal;
+    background: var(--chip); border-radius: 4px; padding: 0 0.25rem;
+  }
+  .explain-note { font-size: 0.78rem; color: var(--muted); margin: 0.75rem 0 0; }
+
   /* ---------- tablet / large phone ---------- */
   @media (max-width: 860px) {
     /* The tabs drop below the title here, so the map has less height to work
@@ -484,6 +530,11 @@
     }
     #overlay.open #overlay-panel { transform: none; }
     #overlay-close { width: 44px; height: 44px; font-size: 1.4rem; }
+    #explain { align-items: flex-end; }
+    #explain-panel {
+      width: 100%; max-height: 85dvh; border-radius: 16px 16px 0 0; border-bottom: none;
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
     /* Grab-handle: the usual signal that a sheet can be dismissed. */
     #overlay-panel::before {
       content: ""; flex: none; width: 36px; height: 4px; border-radius: 2px;
@@ -505,6 +556,10 @@
     #overlay-table th:nth-child(4), #overlay-table td:nth-child(4),
     #overlay-table th:nth-child(6), #overlay-table td:nth-child(6) { display: none; }
     #overlay-table th, #overlay-table td { padding: 0.34rem 0.3rem; }
+    /* Long candidate names would otherwise push the "?" column off-screen. */
+    #overlay-table thead th { white-space: normal; }
+    #overlay-table td.why { padding-left: 0; padding-right: 0; }
+    button.why { width: 24px; height: 24px; }
     .proj-inline {
       display: block; font-weight: 400; color: var(--muted);
       font-size: 0.72rem; line-height: 1.25;
@@ -582,6 +637,15 @@
     <svg id="state-map" role="img"></svg>
     <div id="overlay-table-wrap"><table id="overlay-table"></table></div>
   </div>
+  <div id="explain" hidden>
+    <div id="explain-panel" role="dialog" aria-modal="true" aria-labelledby="explain-title" tabindex="-1">
+      <div id="explain-header">
+        <h3 id="explain-title"></h3>
+        <button id="explain-close" type="button" aria-label="Close">&times;</button>
+      </div>
+      <div id="explain-body"></div>
+    </div>
+  </div>
 </div>
 
 <!--CONFIG-->
@@ -602,7 +666,7 @@ const DISTRICT_TOPOLOGY_URL = "static/districts-albers-10m.json";
 // a fetch() call the way it does for the page's own declared resources.
 // Changing the URL is the one thing that's guaranteed to miss any stale
 // cache entry, browser or intermediate proxy, no matter how it got stale.
-const HISTORICAL_DATA_VERSION = 5;
+const HISTORICAL_DATA_VERSION = 6;
 const HATCH_PX = 5;           // hatch tile size, in screen pixels, for "projected" fills
 const REFRESH_SECONDS = 60;   // how often to re-pull the active race's CSV
 
@@ -795,6 +859,126 @@ window.__mapTest.clampToViewport = clampToViewport;
 
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// ---------- the "?" breakdown: the exact working behind one projection ----------
+// Everything shown comes from the values estimate.js actually used (it returns
+// its intermediates), never re-derived here, so the text cannot drift from the
+// math. Shares are shown to 2 decimals and votes rounded, so re-doing a step by
+// hand can differ from the shown result in the last digit.
+const pctText = x => `${(x * 100).toFixed(2)}%`;
+const ptsText = x => {
+  const shown = (x * 100).toFixed(2);
+  return `${Number(shown) < 0 ? "−" : "+"}${shown.replace("-", "")} pts`; // no "−0.00" for a sub-rounding swing
+};
+
+const NO_BASELINE_REASON = {
+  oneParty: "Only one of the two major parties has a candidate here, so there is no two-party swing to measure.",
+  baselineUnavailable: "The historical baseline could not be loaded, so nothing is compared against the past.",
+  noBaseline: "There is no earlier result for this race here to compare against.",
+  noPartySplit: "The earlier statewide result has a vote total but no party split to compare against.",
+  noCountyEntry: "There is no 2024 presidential result for this county in the baseline.",
+  notCounty: "This area is not a county, and the baseline is county-by-county.",
+  redrawn: "This district was redrawn for 2026, so its 2024 result covers different territory.",
+  noTwoParty: "This district's 2024 race did not have both a Democrat and a Republican on the ballot.",
+  houseCounty: "No county-level House results exist to compare against (the House baseline is per district).",
+};
+
+function describeBaseline(src, area, race) {
+  const label = RACE_META[race].label;
+  if (src.kind === "county") return `${escapeHtml(area.name)}'s ${src.year} presidential result`;
+  if (src.kind === "district") return `this district's ${src.year} House result`;
+  if (src.kind === "state") {
+    return `the ${src.year} statewide ${label} result`
+      + (area.fips ? " (this county has no presidential result to refine it with)"
+                   : " (this area is not a county, so there is no county-level lean to use)");
+  }
+  // derived: the county's own presidential lean, moved by how much the
+  // statewide race ran ahead of or behind the statewide presidential result.
+  return `this county's ${src.referenceYear} presidential D share, shifted by how the ${src.year} statewide `
+    + `${label} result differed from the ${src.referenceYear} statewide presidential one:<br>`
+    + `<code>${pctText(src.countyShare)} + (${pctText(src.stateShare)} − ${pctText(src.stateReferenceShare)})</code>`;
+}
+
+// The second trust factor: how much of the state's expected vote is in areas
+// that have reported at all - only measurable where every county has its own
+// baseline size (President).
+function confidenceAreaText(area, race) {
+  if (RACE_META[race].historicalKey === "state") return "fixed at 1: the statewide baseline has no county-by-county sizes to weigh";
+  if (isDistrictRace(race)) return "fixed at 1: one district is the whole race";
+  return `share of the state's expected vote in areas that have reported, ÷ ${estimate.AREA_VOTE_TRUST_THRESHOLD * 100}%, capped at 1 `
+    + `(<code>${pctText(area.reportingVoteFraction)} ÷ ${estimate.AREA_VOTE_TRUST_THRESHOLD * 100}%</code>; areas with nothing counted yet are sized by their 2024 turnout)`;
+}
+
+// ctx: { race, houseCounty } - houseCounty marks a county inside a House
+// district drill-down, which never has a baseline of its own.
+function explainArea(area, ctx) {
+  const d = area.demReal, r = area.repReal, p = area.percentIn;
+  const counted = d + r;
+  const steps = [];
+  const step = (title, body) => steps.push(`<li><strong>${title}</strong><div>${body}</div></li>`);
+
+  step("Counted so far", `${+p.toFixed(1)}% in: ${numberFmt(d)} D, ${numberFmt(r)} R`
+    + (counted > 0 ? ` &rarr; Democratic share of the two-party count <code>${numberFmt(d)} ÷ ${numberFmt(counted)} = ${pctText(d / counted)}</code>` : ""));
+
+  if (p >= 100) {
+    step("Projection", "Fully counted, so the projection is the count itself.");
+  } else if (area.usedFallback) {
+    const reason = ctx.houseCounty ? "houseCounty" : area.baseline?.reason;
+    step("No baseline", NO_BASELINE_REASON[reason] || NO_BASELINE_REASON.noBaseline);
+    step("Projection", `The rest of the vote is assumed to split like what is counted so far: each side is scaled by `
+      + `<code>100 ÷ ${+p.toFixed(1)} = ×${area.scale.toFixed(4)}</code><br>`
+      + `D <code>${numberFmt(d)} × ${area.scale.toFixed(4)} = ${numberFmt(area.demPredicted)}</code><br>`
+      + `R <code>${numberFmt(r)} × ${area.scale.toFixed(4)} = ${numberFmt(area.repPredicted)}</code>`);
+  } else {
+    const h = area.historical.demShare;
+    step("Baseline", `${describeBaseline(area.baseline, area, ctx.race)} &rarr; D <code>${pctText(h)}</code> of the two-party vote`);
+    step("Swing so far", area.swing == null
+      ? "Nothing counted for either major party yet, so no swing (0)."
+      : `counted share − baseline <code>${pctText(area.countedDemShare)} − ${pctText(h)} = ${ptsText(area.swing)}</code>`);
+    step("How much to trust that swing", `<code>${area.voteComponent.toFixed(3)} × ${area.areaComponent.toFixed(3)} = ${area.weight.toFixed(3)}</code>`
+      + `<ul><li><code>${area.voteComponent.toFixed(3)}</code> = % in ÷ ${estimate.VOTE_TRUST_THRESHOLD * 100}%, capped at 1 `
+      + `(<code>${+p.toFixed(1)} ÷ ${estimate.VOTE_TRUST_THRESHOLD * 100}</code>)</li>`
+      + `<li><code>${area.areaComponent.toFixed(3)}</code> = ${confidenceAreaText(area, ctx.race)}</li></ul>`);
+    step("Democratic share of the vote still to count", `baseline + trust × swing, kept between 0% and 100%<br>`
+      + `<code>${pctText(h)} + ${area.weight.toFixed(3)} × (${ptsText(area.swing || 0)}) = ${pctText(area.remainingShare.demShare)}</code>`);
+    step("Two-party votes still to count", `<code>${numberFmt(counted)} × (100 − ${+p.toFixed(1)}) ÷ ${+p.toFixed(1)} = ${numberFmt(area.remainingVotes)}</code>`);
+    step("Projection", `counted + still to count × share<br>`
+      + `D <code>${numberFmt(d)} + ${numberFmt(area.remainingVotes)} × ${pctText(area.remainingShare.demShare)} = ${numberFmt(area.demPredicted)}</code><br>`
+      + `R <code>${numberFmt(r)} + ${numberFmt(area.remainingVotes)} × ${pctText(area.remainingShare.repShare)} = ${numberFmt(area.repPredicted)}</code>`);
+  }
+  return `<ol class="math">${steps.join("")}</ol>`;
+}
+
+// The state (or district) total: a plain sum of its areas' projections, plus
+// how the expected-ballots figure and the call were reached.
+function explainTotals(agg, areas, ctx) {
+  const reporting = areas.filter(a => !a.noData);
+  const steps = [];
+  const step = (title, body) => steps.push(`<li><strong>${title}</strong><div>${body}</div></li>`);
+  step("Projected total", `the sum of the ${reporting.length} reporting ${reporting.length === 1 ? "area" : "areas"}' projections (the Proj. columns)<br>`
+    + `D <code>${numberFmt(agg.demPredicted)}</code>, R <code>${numberFmt(agg.repPredicted)}</code>`);
+  const projected = agg.demPredicted + agg.repPredicted;
+  let ballots;
+  if (agg.ballotEstimateOverride != null) {
+    ballots = `the larger of the projected two-party total (<code>${numberFmt(projected)}</code>) and the previous `
+      + `election's two-party total (<code>${numberFmt(agg.ballotEstimateOverride)}</code>)`;
+  } else if (agg.silentCount) {
+    ballots = `the projected two-party total (<code>${numberFmt(projected)}</code>) plus the 2024 two-party turnout of `
+      + `the ${agg.silentCount} ${agg.silentCount === 1 ? "county" : "counties"} with nothing counted yet (<code>${numberFmt(agg.silentBallots)}</code>) `
+      + `&mdash; used for the size of the race only, never for either side's projection`;
+  } else {
+    ballots = `the projected two-party total`;
+  }
+  step("Expected total ballots", `${ballots} = <code>${numberFmt(agg.ballotEstimate)}</code>`);
+  const half = agg.ballotEstimate / 2;
+  step("Call", `<em>certain</em> once a side's counted votes alone pass half of that (<code>${numberFmt(half)}</code>); `
+    + `<em>projected</em> once its projected votes do; otherwise no projected winner yet.`);
+  if (ctx.note) step("Note", ctx.note);
+  return `<ol class="math">${steps.join("")}</ol>`;
+}
+
+// The same way the tests call clampToViewport directly.
+Object.assign(window.__mapTest, { explainArea, explainTotals });
+
 // Two things map.html can't get from any single area, both answered by the
 // same question - "which of this state's counties does the caller not have
 // live data for, and what does history say they're worth?":
@@ -828,9 +1012,8 @@ function historicalByPrefix(historical) {
 function stateHistoricalCoverage(areas, historical, race, historicalKeyOf) {
   const nothingToWeighAgainst = { reportingVoteFraction: 1, silentDemPredicted: 0, silentRepPredicted: 0, ballotEstimateOverride: null };
   // Senate/Governor (one historical value for the whole state) and House's
-  // national view (one row IS one whole district - see build_historical_
-  // baseline.py's house-state-apportioned format) both have exactly one
-  // relevant historical entry for the whole group, not a per-county
+  // national view (one row IS one whole district, with its own 2024 result)
+  // both have exactly one relevant historical entry for the whole group, not a per-county
   // breakdown to build a silent-counties sum from - the group's own
   // historical total, when we have one, becomes the ballot estimate
   // directly instead (see buildRaceData). reportingVoteFraction stays at 1
@@ -854,6 +1037,7 @@ function stateHistoricalCoverage(areas, historical, race, historicalKeyOf) {
 
   let silentDemPredicted = 0;
   let silentRepPredicted = 0;
+  let silentCount = 0;
   // Counties the state has but that haven't reported at all yet are absent
   // from `areas` entirely (fetch_results.py never writes a row for 0%
   // counted areas) - this is the only place that gap gets filled back in.
@@ -864,11 +1048,12 @@ function stateHistoricalCoverage(areas, historical, race, historicalKeyOf) {
     totalExpected += expected;
     silentDemPredicted += expected * entry.demShare;
     silentRepPredicted += expected * entry.repShare;
+    silentCount += 1;
   }
 
   return {
     reportingVoteFraction: totalExpected > 0 ? reportingExpected / totalExpected : 1,
-    silentDemPredicted, silentRepPredicted, ballotEstimateOverride: null,
+    silentDemPredicted, silentRepPredicted, silentCount, ballotEstimateOverride: null,
   };
 }
 
@@ -880,9 +1065,38 @@ function countyBaselineFactory(areas, historical, historicalKeyOf, countyReferen
   if (!countyReference || !prefix) return () => null;
   const stateEntry = historical[historicalKeyOf(areas[0])];
   const stateReferenceShare = estimate.stateShareFromCounties(historicalByPrefix(countyReference).get(prefix) || []);
-  return area => (area.fips
-    ? estimate.shiftedCountyBaseline(countyReference[area.fips], stateEntry, stateReferenceShare)
-    : null);
+  return area => {
+    const reference = area.fips ? countyReference[area.fips] : null;
+    const entry = reference ? estimate.shiftedCountyBaseline(reference, stateEntry, stateReferenceShare) : null;
+    return entry && {
+      entry,
+      source: { kind: "derived", countyShare: reference.demShare, referenceYear: reference.year,
+                stateShare: stateEntry.demShare, stateReferenceShare, year: stateEntry.year },
+    };
+  };
+}
+
+// Which baseline an area is projected against, and where it came from - or,
+// when there is none, exactly why. The "?" breakdown shows this verbatim.
+function chooseBaseline(area, race, historical, historicalKeyOf, countyBaselineOf, haveBaseline) {
+  const none = reason => ({ entry: null, source: { kind: "none", reason } });
+  if (!area.contested) return none("oneParty");
+  if (!haveBaseline) return none("baselineUnavailable");
+  const meta = RACE_META[race];
+  if (meta.historicalKey === "state") {
+    const derived = countyBaselineOf(area);
+    if (derived) return derived;
+    const entry = historical[historicalKeyOf(area)];
+    if (!entry) return none("noBaseline");
+    if (!Number.isFinite(entry.demShare)) return { entry, source: { kind: "none", reason: "noPartySplit", year: entry.year } };
+    return { entry, source: { kind: "state", year: entry.year } };
+  }
+  const entry = area.fips ? historical[area.fips] : null;
+  if (entry && Number.isFinite(entry.demShare)) {
+    return { entry, source: { kind: isDistrictRace(race) ? "district" : "county", year: entry.year } };
+  }
+  if (isDistrictRace(race)) return none(redrawnDistricts.has(area.fips) ? "redrawn" : "noTwoParty");
+  return none(area.fips ? "noCountyEntry" : "notCounty");
 }
 
 // historical is this race's parsed historical_<race>.json (or {} if it
@@ -893,8 +1107,15 @@ function countyBaselineFactory(areas, historical, historicalKeyOf, countyReferen
 // countyReference: for state-keyed races (Senate/Governor), the President
 // baseline, used to give each county its own baseline - see
 // estimate.shiftedCountyBaseline. Null for the other races.
-function buildRaceData(rows, race, historical, countyReference) {
+function buildRaceData(rows, race, historical, countyReference, meta) {
   const dataByKey = new Map();
+  // A redrawn district's 2024 result covers its old lines, so it must not be
+  // painted onto the new ones: until real results for the new lines exist,
+  // such a district is shown as having no data, and says why.
+  const staleLines = isDistrictRace(race) && meta && meta.source !== "mock"
+    && Number(meta.dataYear) < RACE_META[race].year;
+  const redrawnHidden = staleLines ? redrawnDistricts : new Set();
+  const haveBaseline = Object.keys(historical).length > 0; // {} when the file is missing or failed to load
   const stateAggregates = new Map();
   // Every reporting area of a state, in order, whether or not it can be drawn.
   // The eight states reported by township/ward/district have no county shapes,
@@ -922,6 +1143,8 @@ function buildRaceData(rows, race, historical, countyReference) {
     const totalVotes = +row["Total Votes"];
     // "no data yet" placeholders, and any county with nothing counted.
     if (!percentIn || !totalVotes) continue;
+
+    if (redrawnHidden.has(row["FIPS"])) continue;
 
     const stateKey = groupKeyOf(row);
     const area = {
@@ -955,13 +1178,13 @@ function buildRaceData(rows, race, historical, countyReference) {
   // stateHistoricalCoverage below. Then aggregate the now-estimated areas up
   // to the state.
   for (const [stateKey, areas] of areasByState) {
-    const { reportingVoteFraction, silentDemPredicted, silentRepPredicted, ballotEstimateOverride } =
+    const { reportingVoteFraction, silentDemPredicted, silentRepPredicted, silentCount = 0, ballotEstimateOverride } =
       stateHistoricalCoverage(areas, historical, race, historicalKeyOf);
     const countyBaselineOf = countyBaselineFactory(areas, historical, historicalKeyOf, countyReference);
     for (const area of areas) {
-      const historicalEntry = area.contested
-        ? countyBaselineOf(area) || historical[historicalKeyOf(area)] : null;
-      Object.assign(area, estimate.estimateArea(area, historicalEntry, reportingVoteFraction));
+      const { entry, source } = chooseBaseline(area, race, historical, historicalKeyOf, countyBaselineOf, haveBaseline);
+      area.baseline = source;
+      Object.assign(area, estimate.estimateArea(area, entry, reportingVoteFraction));
     }
 
     // A single county's raw leader and predicted leader can differ now (they
@@ -994,6 +1217,9 @@ function buildRaceData(rows, race, historical, countyReference) {
     agg.ballotEstimate = ballotEstimateOverride != null
       ? Math.max(ballotEstimateOverride, agg.demPredicted + agg.repPredicted)
       : agg.demPredicted + agg.repPredicted + silentDemPredicted + silentRepPredicted;
+    // Kept so the "?" breakdown can show where ballotEstimate came from.
+    Object.assign(agg, { ballotEstimateOverride, silentBallots: silentDemPredicted + silentRepPredicted,
+                         silentCount, reportingVoteFraction });
     stateAggregates.set(stateKey, agg);
   }
 
@@ -1008,7 +1234,7 @@ function buildRaceData(rows, race, historical, countyReference) {
     agg.geography = row["Geography"] || agg.geography;
   }
 
-  return { dataByKey, stateAggregates, areasByState };
+  return { dataByKey, stateAggregates, areasByState, redrawnHidden };
 }
 
 // A status's non-county Geography ("electionDayVoteCenters") spelled out for
@@ -1105,12 +1331,15 @@ function loadHistoricalBaseline(race) {
 // hand-type like the other races' weights - so they're filled in from the
 // topology itself here.
 let districtFeatures = null;
+// Districts whose 2026 lines differ from 2024's (build_district_geometry.py).
+let redrawnDistricts = new Set();
 let districtsPromise = null;
 function loadDistricts() {
   return districtsPromise ??= fetch(DISTRICT_TOPOLOGY_URL)
     .then(r => { if (!r.ok) throw new Error(`${r.status} fetching district boundaries`); return r.json(); })
     .then(t => {
       districtFeatures = topojson.feature(t, t.objects.districts).features;
+      redrawnDistricts = new Set(districtFeatures.filter(d => d.properties.redrawnSince2024).map(d => d.id));
       RACE_META.house.weights = Object.fromEntries(districtFeatures.map(d => [d.id, 1]));
     })
     .catch(err => { districtsPromise = null; throw err; });
@@ -1149,7 +1378,7 @@ function loadRace(race, prev) {
       && prev.countyReference === countyReference
       ? { ...prev, meta, unchanged: true }
       : { race, meta, historical, countyReference, csvText,
-          ...buildRaceData(parseRaceCsv(csvText), race, historical, countyReference) }));
+          ...buildRaceData(parseRaceCsv(csvText), race, historical, countyReference, meta) }));
 }
 
 function start(topology, defaultRaceData) {
@@ -1323,9 +1552,9 @@ function start(topology, defaultRaceData) {
       stateName,
       stateKey: normalize(stateName || ""),
       data: current.dataByKey.get(feature.id), // feature.id IS the county FIPS
-      // Only meaningful when historicalKey is "fips" - Senate/Governor's
-      // baseline is state-level only (see build_historical_baseline.py), so
-      // there is no per-county number to show for those two races here.
+      // A silent county's own past result - only President has one on file
+      // (Senate/Governor keep one statewide number; their county baselines
+      // are derived only for counties that report).
       historicalEntry: RACE_META[current.race].historicalKey === "fips"
         ? (current.historical || {})[feature.id] : null,
     };
@@ -1365,9 +1594,9 @@ function start(topology, defaultRaceData) {
     const swingDir = data.swing >= 0 ? `+${swingPts}pt D` : `${swingPts}pt D`;
     const confidencePct = (data.weight * 100).toFixed(0);
     const remainShare = data.remainingShare;
-    // Senate/Governor have one statewide result; the county figure is derived.
-    const label = RACE_META[current.race].historicalKey === "state"
-      ? `County baseline (est. from ${h.year} statewide)` : `Historical baseline (${h.year})`;
+    const kind = data.baseline?.kind;
+    const label = kind === "derived" ? `County baseline (est. from ${h.year} statewide)`
+      : kind === "state" ? `Statewide baseline (${h.year})` : `Historical baseline (${h.year})`;
     return `${label}: D ${(h.demShare * 100).toFixed(0)}% / R ${(h.repShare * 100).toFixed(0)}%<br>`
       + `Observed swing so far: ${swingDir} (confidence ${confidencePct}%)<br>`
       + `Remaining-vote projection: D ${(remainShare.demShare * 100).toFixed(0)}% / R ${(remainShare.repShare * 100).toFixed(0)}%`;
@@ -1432,6 +1661,10 @@ function start(topology, defaultRaceData) {
 
   function stateSummary(key, status) {
     if (!hasRace(key)) return `No ${RACE_META[current.race].label} race in ${RACE_META[current.race].year}`;
+    if (current.redrawnHidden?.has(key)) {
+      return `Redrawn for ${RACE_META[current.race].year}. The ${current.meta.dataYear} results cover the old lines, `
+        + `so nothing is shown until results for the new district exist`;
+    }
     if (!status) {
       const ballots = historicalOnlyBallots(key);
       // Plain text, not "&middot;" - this string is also used as an
@@ -1469,7 +1702,8 @@ function start(topology, defaultRaceData) {
           html += `${+data.percentIn.toFixed(1)}% in, ${numberFmt(totalBallots)} total ballots<br>`
             + `Real: ${numberFmt(data.demReal)} D / ${numberFmt(data.repReal)} R<br>`;
           if (data.usedFallback) {
-            html += `No historical baseline for this area &mdash; using live-only estimate<br>`;
+            html += `No baseline: ${NO_BASELINE_REASON[data.baseline?.reason] || NO_BASELINE_REASON.noBaseline} `
+              + `The rest of the vote is assumed to split like the count so far.<br>`;
           } else if (data.historical) {
             html += describeEstimateBreakdown(data) + "<br>";
           }
@@ -1484,7 +1718,7 @@ function start(topology, defaultRaceData) {
   function renderNational() {
     const districtRace = isDistrictRace(current.race);
     const features = nationalFeatures();
-    const clickable = d => hasRace(weightKeyOf(d));
+    const clickable = d => hasRace(weightKeyOf(d)) && !current.redrawnHidden?.has(weightKeyOf(d));
     const openOverlay = d => (districtRace ? openDistrictOverlay(d) : openStateOverlay(d));
 
     // selectAll("*").remove() destroys the focused path, so remember which
@@ -1678,7 +1912,8 @@ function start(topology, defaultRaceData) {
   // is heading once every area is extrapolated to full reporting. Counted is
   // drawn in the "certain" colour and the projection in the "projected" one,
   // matching the map so the two readings line up.
-  function renderOverlaySummary(status, names) {
+  // explainTotal: () => HTML for the "?" breakdown of this total.
+  function renderOverlaySummary(status, names, explainTotal) {
     const box = d3.select("#overlay-summary");
     if (!status) { box.html(""); return; }
     const agg = status.agg;
@@ -1721,11 +1956,17 @@ function start(topology, defaultRaceData) {
         <div class="cand-sub">${pct(side.now, nowTotal).toFixed(1)}% of votes counted &middot;
           ${pct(side.proj, projTotal).toFixed(1)}% projected</div>
       </div>`;
-    }).join(""));
+    }).join("") + (explainTotal ? `<button type="button" class="why-total">How this total is computed</button>` : ""));
+    box.select("button.why-total").on("click", event =>
+      openExplain(`${d3.select("#overlay-title").text()}: how the total is computed`, explainTotal(), event.currentTarget));
   }
 
-  function renderOverlayTable(areasIn, status, names) {
+  // ctx: { race, houseCounty } - passed through to explainArea.
+  let explainRows = [], explainCtx = null;
+  function renderOverlayTable(areasIn, status, names, ctx) {
     const areas = areasIn.slice().sort((a, b) => a.name.localeCompare(b.name));
+    explainRows = areas;
+    explainCtx = ctx;
     const wrap = d3.select("#overlay-table-wrap");
     if (!areas.length) { wrap.style("display", "none"); return; }
     wrap.style("display", null);
@@ -1734,26 +1975,28 @@ function start(topology, defaultRaceData) {
       ? geographyLabel(status)
       : "counties";
     const reportingCount = areas.filter(area => !area.noData).length;
-    const rows = areas.map(area => (area.noData ? `
+    const rows = areas.map((area, i) => (area.noData ? `
       <tr>
         <td>${escapeHtml(area.name)}</td>
-        <td colspan="5" class="proj">No data yet</td>
+        <td colspan="6" class="proj">No data yet</td>
       </tr>` : `
-      <tr>
+      <tr class="explainable" data-i="${i}">
         <td>${escapeHtml(area.name)}</td>
         <td>${(+area.percentIn.toFixed(1))}%</td>
         <td class="dem-now">${numberFmt(area.demReal)}<span class="proj-inline">${numberFmt(area.demPredicted)}</span></td>
         <td class="proj">${numberFmt(area.demPredicted)}</td>
         <td class="rep-now">${numberFmt(area.repReal)}<span class="proj-inline">${numberFmt(area.repPredicted)}</span></td>
         <td class="proj">${numberFmt(area.repPredicted)}</td>
+        <td class="why"><button type="button" class="why" aria-label="How ${escapeHtml(area.name)}'s projection is computed">?</button></td>
       </tr>`)).join("");
 
     d3.select("#overlay-table").html(`
-      <caption>${reportingCount} of ${areas.length} ${unit} reporting &middot; counted, then projected to full reporting</caption>
+      <caption>${reportingCount} of ${areas.length} ${unit} reporting &middot; counted, then projected to full reporting &middot; ? shows the working</caption>
       <thead><tr>
         <th scope="col">Area</th><th scope="col">In</th>
         <th scope="col">${escapeHtml(names.dem)}</th><th scope="col">Proj.</th>
         <th scope="col">${escapeHtml(names.rep)}</th><th scope="col">Proj.</th>
+        <th scope="col"><span class="visually-hidden">How it is computed</span></th>
       </tr></thead>
       <tbody>${rows}</tbody>`);
   }
@@ -1779,7 +2022,8 @@ function start(topology, defaultRaceData) {
       rep: anyArea ? anyArea.repName : "Republican",
     };
     const status = stateStatus(stateKey);
-    renderOverlaySummary(status, names);
+    const reportingForTotal = current.areasByState.get(stateKey) || [];
+    renderOverlaySummary(status, names, () => explainTotals(status.agg, reportingForTotal, {}));
     // The map already shows every county of the state, reporting or not
     // (countyFill falls back to "no data" grey) - the table used to only
     // list reporting ones. Non-county states are the one exception: their
@@ -1792,7 +2036,7 @@ function start(topology, defaultRaceData) {
       : reportingAreas.concat(countiesInState
           .filter(c => !knownFips.has(c.id))
           .map(c => ({ name: c.properties.name, noData: true })));
-    renderOverlayTable(tableAreas, status, names);
+    renderOverlayTable(tableAreas, status, names, { race: current.race });
     const note = status && !status.countyLevel
       ? `${stateSummary(stateName, status)} — this state reports by `
         + `${geographyLabel(status)} rather than by county, so there is no county breakdown.`
@@ -1835,9 +2079,7 @@ function start(topology, defaultRaceData) {
 
   function districtSummary(status) {
     if (!status) return "No data yet";
-    const formatted = `${(status.agg.ballotEstimate / 1e6).toFixed(2)}M`;
-    const ballots = status.agg.allCountiesKnown ? formatted : `~${formatted}`;
-    return summarizeStatus(status, ballots);
+    return summarizeStatus(status, `${(status.agg.ballotEstimate / 1e6).toFixed(2)}M`);
   }
 
   // A district drill-down's counties are keyed by a Map built fresh from the
@@ -1879,11 +2121,8 @@ function start(topology, defaultRaceData) {
 
     // The server hands back real counts only (see server.py's
     // _house_district_payload) - estimate.js projects them the same way it
-    // projects the CSV-sourced areas. There is no county-level historical
-    // baseline for House (MEDSL's House returns are district-level, not
-    // county-level - see build_historical_baseline.py), so every county here
-    // always falls back to the flat estimate; that's a real, documented v1
-    // limitation, not a bug.
+    // projects the CSV-sourced areas. The House baseline is per district, not
+    // per county, so every county here falls back to the flat estimate.
     const areas = payload.areas.map(a => ({
       ...a,
       // reportingVoteFraction is irrelevant here (passed as 1): with no
@@ -1894,43 +2133,42 @@ function start(topology, defaultRaceData) {
         undefined, 1),
     }));
 
-    // Same shape stateStatusFor already knows how to read - one synthetic
-    // "state" aggregate, built by summing this district's own areas exactly
-    // the way buildRaceData sums a state's counties. Skipped entirely when
-    // nothing has reported yet (areas.length alone isn't enough to tell that
-    // any more - it now also counts counties at 0%), matching
-    // stateStatusFor's own "no aggregate for this key -> null" convention (a
-    // status object built with real zeros would print "0% in, tied" instead
-    // of "No data yet").
-    const districtDemPredicted = areas.reduce((sum, a) => sum + a.demPredicted, 0);
-    const districtRepPredicted = areas.reduce((sum, a) => sum + a.repPredicted, 0);
-    const status = areas.some(a => !a.noData) ? stateStatusFor({
+    // How this district reports - the same two fields stateStatusFor derives.
+    const geography = payload.geography || "counties";
+    const countyStatus = { geography, countyLevel: geography === "counties" || geography === "parishes" };
+
+    // Fallback only, for a district the national results don't list yet: its
+    // counties summed, the way buildRaceData sums a state's counties. Null
+    // when nothing has reported (stateStatusFor's "no data yet" convention).
+    const countySum = sum => areas.reduce((total, a) => total + (sum(a) || 0), 0);
+    const countySumStatus = areas.some(a => !a.noData) ? stateStatusFor({
       stateAggregates: new Map([[feature.id, {
-        totalExpected: payload.totalExpected,
-        totalVotes: areas.reduce((sum, a) => sum + a.votes, 0),
-        demReal: areas.reduce((sum, a) => sum + a.demReal, 0),
-        repReal: areas.reduce((sum, a) => sum + a.repReal, 0),
-        demPredicted: districtDemPredicted,
-        repPredicted: districtRepPredicted,
-        geography: payload.geography,
-        // No per-county historical baseline exists for House (see
-        // build_historical_baseline.py), so a county with nothing counted
-        // yet contributes nothing at all to demPredicted/repPredicted above
-        // - the district's total is a known undercount whenever any county
-        // hasn't reported, not an approximation of one. There's also no
-        // historical fallback to add for ballotEstimate here the way
-        // buildRaceData's own aggregate has - it's just the same total.
-        ballotEstimate: districtDemPredicted + districtRepPredicted,
-        allCountiesKnown: areas.every(a => !a.noData),
+        totalExpected: payload.totalExpected, totalVotes: countySum(a => a.votes),
+        demReal: countySum(a => a.demReal), repReal: countySum(a => a.repReal),
+        demPredicted: countySum(a => a.demPredicted), repPredicted: countySum(a => a.repPredicted),
+        ballotEstimate: countySum(a => a.demPredicted) + countySum(a => a.repPredicted),
+        geography, silentCount: 0,
       }]]),
     }, feature.id) : null;
 
-    renderOverlaySummary(status, names);
-    renderOverlayTable(areas, status, names);
+    // The summary is the district's own projection - the one the national map
+    // shows, made against the district's 2024 result. The county rows below
+    // are each projected on their own, with no baseline (there is no
+    // county-level House history), so they need not add up to exactly this.
+    const districtStatus = stateStatus(feature.id);
+    const districtArea = (current.areasByState.get(feature.id) || [])[0];
+    const status = districtStatus || countySumStatus;
+    renderOverlaySummary(status, names, districtStatus && districtArea
+      ? () => explainArea(districtArea, { race: current.race })
+        + `<p class="explain-note">The county rows below are each projected on their own, with no baseline `
+        + `(there are no county-level House results to compare against), so they need not add up to exactly this total.</p>`
+      : () => explainTotals(countySumStatus.agg, areas, { note: "The national results don't list this district yet, "
+        + "so this total is its counties added up." }));
+    renderOverlayTable(areas, countyStatus, names, { race: current.race, houseCounty: true });
 
-    const note = status && !status.countyLevel
+    const note = countyStatus && !countyStatus.countyLevel
       ? `${districtSummary(status)} — this district reports by `
-        + `${geographyLabel(status)} rather than by county, so there is no county map.`
+        + `${geographyLabel(countyStatus)} rather than by county, so there is no county map.`
       : districtSummary(status);
     d3.select("#overlay-title").text(label);
     d3.select("#overlay-note").text(note);
@@ -2022,8 +2260,38 @@ function start(topology, defaultRaceData) {
       });
   }
 
+  // ---------- the "?" breakdown popup ----------
+  const explainBox = d3.select("#explain");
+  let explainTrigger = null;
+  function openExplain(title, html, trigger) {
+    explainTrigger = trigger;
+    d3.select("#explain-title").text(title);
+    d3.select("#explain-body").html(html);
+    explainBox.attr("hidden", null);
+    hideTooltip();
+    document.getElementById("explain-panel").focus();
+  }
+  const explainOpen = () => explainBox.attr("hidden") === null;
+  function closeExplain() {
+    if (!explainOpen()) return;
+    explainBox.attr("hidden", "");
+    if (explainTrigger && explainTrigger.isConnected) explainTrigger.focus();
+    explainTrigger = null;
+  }
+  d3.select("#explain-close").on("click", () => closeExplain());
+  explainBox.on("click", event => { if (event.target.id === "explain") closeExplain(); });
+  // A row's "?" button, or anywhere on the row: one wide tap target per area.
+  d3.select("#overlay-table").on("click", event => {
+    const row = event.target.closest("tr.explainable");
+    if (!row) return;
+    const area = explainRows[+row.dataset.i];
+    openExplain(`${area.name}: how the projection is computed`, explainArea(area, explainCtx),
+      row.querySelector("button.why"));
+  });
+
   function closeOverlay({ restoreFocus = true } = {}) {
     if (!overlay.classed("open")) return;
+    closeExplain();
     overlay.classed("open", false);
     document.documentElement.classList.remove("overlay-open");
     openStateFeature = null;
@@ -2054,10 +2322,10 @@ function start(topology, defaultRaceData) {
   d3.select("#overlay-close").on("click", () => closeOverlay());
   overlay.on("click", event => { if (event.target.id === "overlay") closeOverlay(); });
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape") { closeOverlay(); return; }
+    if (event.key === "Escape") { if (explainOpen()) closeExplain(); else closeOverlay(); return; }
     if (event.key !== "Tab" || !overlay.classed("open")) return;
     // Belt and braces alongside `inert`, which older browsers ignore.
-    const panel = document.getElementById("overlay-panel");
+    const panel = document.getElementById(explainOpen() ? "explain-panel" : "overlay-panel");
     const focusable = [...panel.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])')];
     if (!focusable.length) { event.preventDefault(); panel.focus(); return; }
     const first = focusable[0];

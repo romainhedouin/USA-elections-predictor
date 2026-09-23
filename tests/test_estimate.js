@@ -14,6 +14,7 @@ const {
   estimateArea,
   stateShareFromCounties,
   shiftedCountyBaseline,
+  confidenceParts,
 } = require("../estimate.js");
 
 test("confidenceWeight is 0 with nothing counted", () => {
@@ -191,4 +192,34 @@ test("a deep-blue county counting at its usual level is not dragged to the state
   const own = estimateArea(area, countyBaseline, 1);
   assert.ok(dragged.remainingShare.demShare < 0.6); // the old bug: ~58.7% D for the rest
   assert.ok(Math.abs(own.remainingShare.demShare - 0.73) < 0.01);
+});
+
+test("confidenceParts' two factors multiply to confidenceWeight", () => {
+  const parts = confidenceParts(20, 0.15);
+  assert.equal(parts.voteComponent, 0.4);  // 20% in / 50%
+  assert.equal(parts.areaComponent, 0.5);  // 15% of the state's vote / 30%
+  assert.equal(parts.weight, 0.2);
+  assert.equal(confidenceWeight(20, 0.15), parts.weight);
+});
+
+test("estimateArea's returned intermediates reproduce its own projection exactly", () => {
+  // The "?" breakdown shows these values as the working, so they must add up.
+  const area = { demReal: 3100, repReal: 2900, totalVotes: 6200, percentIn: 30 };
+  const r = estimateArea(area, { demShare: 0.46, repShare: 0.54 }, 0.2);
+  const counted = area.demReal + area.repReal;
+  assert.ok(Math.abs(r.countedDemShare - 3100 / 6000) < 1e-12);
+  assert.ok(Math.abs(r.swing - (r.countedDemShare - 0.46)) < 1e-12);
+  assert.ok(Math.abs(r.weight - r.voteComponent * r.areaComponent) < 1e-12);
+  assert.ok(Math.abs(r.remainingShare.demShare - (0.46 + r.weight * r.swing)) < 1e-12);
+  assert.ok(Math.abs(r.remainingVotes - counted * 70 / 30) < 1e-9);
+  assert.ok(Math.abs(r.demPredicted - (3100 + r.remainingVotes * r.remainingShare.demShare)) < 1e-9);
+  assert.ok(Math.abs(r.repPredicted - (2900 + r.remainingVotes * r.remainingShare.repShare)) < 1e-9);
+  assert.equal(r.reportingVoteFraction, 0.2);
+});
+
+test("the flat fallback reports the scale it applied", () => {
+  const r = estimateArea({ demReal: 300, repReal: 200, totalVotes: 520, percentIn: 25 }, null, 1);
+  assert.equal(r.scale, 4);
+  assert.equal(r.demPredicted, 300 * r.scale);
+  assert.equal(r.repPredicted, 200 * r.scale);
 });

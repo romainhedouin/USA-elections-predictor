@@ -123,3 +123,41 @@ def test_house_tab_fits_and_has_no_console_errors(house_page, viewport):
         "const e = document.documentElement; return e.scrollHeight - e.clientHeight;")
     assert overflow <= 0, f"page scrolls vertically by {overflow}px on the House tab"
     assert not severe_logs(driver)
+
+
+@pytest.fixture
+def stale_house_page(site, tmp_path):
+    """The mock site, but with its House results labelled as live 2024 data -
+    the situation until 2026 results exist, where the 137 districts redrawn
+    since 2024 have only old-line results to show."""
+    import json
+    import shutil
+    copy = tmp_path / "site"
+    shutil.copytree(site, copy)
+    meta_path = copy / "raw_data_house.meta.json"
+    meta = json.loads(meta_path.read_text())
+    meta.update(source="live", dataYear="2024")
+    meta_path.write_text(json.dumps(meta))
+    yield from house_pages(copy, {}, delay=0, default_viewport="desktop")
+
+
+def test_redrawn_districts_show_no_old_line_results(stale_house_page):
+    driver = stale_house_page()
+    info = driver.execute_script("""
+      const paths = [...document.querySelectorAll('#map path.state')];
+      const redrawn = paths.filter(p => p.__data__.properties.redrawnSince2024);
+      const il7 = paths.find(p => p.__data__.id === '1707');
+      return {
+        redrawn: redrawn.length,
+        clickable: redrawn.filter(p => p.getAttribute('tabindex') === '0').length,
+        explained: redrawn.filter(p => p.getAttribute('aria-label').includes('Redrawn for 2026')).length,
+        il7Clickable: il7.getAttribute('tabindex') === '0',
+        il7Label: il7.getAttribute('aria-label'),
+      };""")
+    assert info["redrawn"] == 137
+    assert info["clickable"] == 0
+    assert info["explained"] == 137
+    # An unchanged district with results is untouched.
+    assert info["il7Clickable"] and "% in" in info["il7Label"]
+    click_district(driver, "0601")  # redrawn: must not open a drill-down of the old lines
+    assert not driver.execute_script("return document.querySelector('#overlay').classList.contains('open')")

@@ -21,15 +21,30 @@ count into a projection for its full count, one of two ways:
 
 A county's raw leader and its own projection can differ; the map outlines any
 state or district where the projected winner disagrees with whoever's
-currently "leading" on raw votes. Hover a county for the full breakdown.
+currently "leading" on raw votes. In a drill-down, the **?** next to each row
+(or tapping the row) shows the exact working for that projection, step by step
+with the real numbers, and "How this total is computed" does the same for the
+state or district total.
 
 `scripts/build_historical_baseline.py` builds `static/historical_<race>.json`
-once per cycle from [MEDSL](https://electionlab.mit.edu/) and other public
-election data. Coverage varies by race — President and Senate have real
-county/state-level party splits; House and Governor currently have real
-ballot-count totals but no party split, so they fall back to the flat
-estimate for the D/R projection. See that script's docstring for the exact
-sourcing and known gaps per race.
+once per cycle. What each race is compared against:
+
+| Race | Baseline |
+|---|---|
+| President | each county's 2024 presidential result |
+| Senate | each county's 2024 presidential lean, shifted by how the state's last Senate race for that seat differed from its 2024 presidential result ([MIT Election Lab](https://electionlab.mit.edu/) statewide returns) |
+| House | each district's 2024 result, from NBC's final numbers (checked against the House Clerk's official statistics). Districts redrawn for 2026 have none |
+| Governor | none yet: vote totals but no party split, so the plain extrapolation |
+
+Areas with no baseline (a town rather than a county, a one-party race, a
+redrawn district) use the plain extrapolation, and the **?** says which reason
+applies. See that script's docstring for the exact sourcing and known gaps.
+
+Nine states use new House maps in 2026 (Alabama, California, Florida,
+Louisiana, North Carolina, Ohio, Tennessee, Texas, Utah). The district map uses
+those lines (`scripts/build_district_topology.sh`, from the Census Bureau's
+120th-Congress files). Until 2026 results exist, the 137 districts whose lines
+changed show no results, since the 2024 ones cover different territory.
 
 ## Requirements
 
