@@ -165,7 +165,7 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 # Railway reads stdout; line buffering makes logs show up live instead of in
-# 8KB bursts.
+# 8 KiB bursts.
 try:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
@@ -708,7 +708,7 @@ class Handler(BaseHTTPRequestHandler):
         The substitution result is cached on the class (DEFAULT_RACE is fixed
         for the life of the process and map.html is baked into the image), so
         a request serving the single busiest route on the site does not re-read
-        a 69KB file from disk and re-run a string replace every single time.
+        a 69 kB file from disk and re-run a string replace every single time.
         """
         body = Handler._index_html
         if body is None:

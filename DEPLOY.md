@@ -409,18 +409,18 @@ county topology come from jsDelivr, not Railway):
 
 | What | Size |
 | --- | --- |
-| Page (`map.html` + `estimate.js`) | ~36KB |
-| President CSV + historical baseline | ~93KB + ~39KB |
-| Senate / Governor CSV + baseline | ~2KB each |
-| House CSV + baseline + district topology (House tab only) | ~3KB + ~3KB + ~64KB |
-| 60s poll, data unchanged (two 304s) | ~1KB |
-| 60s poll, data changed | the active race's CSV, up to ~93KB |
+| Page (`map.html` + `estimate.js`) | ~36 kB |
+| President CSV + historical baseline | ~93 kB + ~39 kB |
+| Senate / Governor CSV + baseline | ~2 kB each |
+| House CSV + baseline + district topology (House tab only) | ~3 kB + ~3 kB + ~64 kB |
+| 60 s poll, data unchanged (two 304s) | ~1 kB |
+| 60 s poll, data changed | the active race's CSV, up to ~93 kB |
 
-So a first visit is ~40KB (Senate default) to ~170KB (every tab opened), and
-an idle open tab costs ~60KB/hour; hidden tabs don't poll at all. The one
+So a first visit is ~40 kB (Senate default) to ~170 kB (every tab opened), and
+an idle open tab costs ~60 kB/h; hidden tabs don't poll at all. The one
 thing that scales is **election night with `REFRESH_SECONDS=60`**: the CSV
-changes every cycle, so each visible tab on President downloads up to ~93KB a
-minute, ~5.6MB/hour. 10k people watching for 3 hours is roughly 170GB ≈
+changes every cycle, so each visible tab on President downloads up to ~93 kB a
+minute, ~5.6 MB/h. 10k people watching for 3 hours is roughly 170 GB ≈
 **$8.50** — noticeable against the $5 credit, which is why the hard limit
 below must be raised before that night.
 
